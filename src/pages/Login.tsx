@@ -4,7 +4,7 @@ import { useDispatch } from 'react-redux';
 import { setPhoneNumberForOtp } from '../redux/authSlice';
 import toast from 'react-hot-toast';
 import { MessageCircle } from 'lucide-react';
-
+import { API_URL } from '../utils/api';
 export default function Login() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ export default function Login() {
     }
 
     try {
-      const res = await fetch('/api/auth/send-otp', {
+      const res = await fetch(`${API_URL}/api/auth/send-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber }),

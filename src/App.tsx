@@ -8,7 +8,7 @@ import { store, RootState } from './redux/store';
 import { loginSuccess, logout } from './redux/authSlice';
 import { Toaster } from 'react-hot-toast';
 import { useEffect, useState } from 'react';
-
+import { API_URL } from './utils/api';
 import Login from './pages/Login';
 import OTP from './pages/OTP';
 import Home from './pages/Home';
@@ -23,7 +23,7 @@ function AppContent() {
     const fetchUser = async () => {
       if (token && !user) {
         try {
-          const res = await fetch('/api/auth/me', {
+          const res = await fetch(`${API_URL}/api/auth/me`, {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           if (res.ok) {

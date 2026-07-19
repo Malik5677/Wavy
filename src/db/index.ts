@@ -5,14 +5,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
 
-console.log("========== DATABASE CONFIG ==========");
-console.log("DATABASE_URL:", process.env.DATABASE_URL);
-console.log("SQL_USER:", process.env.SQL_USER);
-console.log("SQL_PASSWORD:", process.env.SQL_PASSWORD ? "******" : undefined);
-console.log("SQL_HOST:", process.env.SQL_HOST);
-console.log("SQL_DB_NAME:", process.env.SQL_DB_NAME);
-console.log("SQL_PORT:", process.env.SQL_PORT);
-console.log("=====================================");
+
 
 // Use DATABASE_URL if available, otherwise use SQL_* variables
 const pool = process.env.DATABASE_URL
