@@ -431,6 +431,7 @@ export default function Home() {
       });
       
       newSocket.on("receive_message", (msg) => {
+         console.log("📥 RECEIVED MESSAGE", msg);
         if (msg.senderId !== userRef.current?.id) {
           newSocket.emit("message_delivered", { messageId: msg.id, chatId: msg.chatId });
         }
