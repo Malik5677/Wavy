@@ -580,7 +580,9 @@ export default function Home() {
     if (!u) return { name: '?', photo: '', bio: '', isSaved: false, originalName: '' };
     const saved = savedContacts.find(c => c.contactId === (u.id || u.userId));
     const isSaved = !!saved;
-    const name = saved ? saved.customName : (u.phoneNumber || u.displayName || u.username || '?');
+    const name = saved
+  ? saved.customName
+  : (u.displayName || u.username || u.phoneNumber || '?');
     const originalName = u.displayName || u.username;
     return {
       name,

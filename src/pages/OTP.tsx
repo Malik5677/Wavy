@@ -9,6 +9,7 @@ import { API_URL } from '../utils/api';
 
 export default function OTP() {
   const [code, setCode] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const navigate = useNavigate();
   const dispatch = useDispatch();
   const phoneNumber = useSelector((state: RootState) => state.auth.phoneNumberForOtp);
@@ -24,7 +25,11 @@ export default function OTP() {
       const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, code }),
+        body: JSON.stringify({
+  phoneNumber,
+  code,
+  displayName,
+}),
       });
 
       if (!res.ok) {
@@ -60,24 +65,43 @@ export default function OTP() {
         <p className="text-gray-500 mb-8 text-center">We sent an SMS with a code to {phoneNumber}. For testing, use the mock code printed in the server logs.</p>
         
         <form onSubmit={handleVerify} className="w-full">
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">6-Digit Code</label>
-            <input
-              type="text"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder="123456"
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-center tracking-widest text-lg"
-              maxLength={6}
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
-          >
-            Verify
-          </button>
-        </form>
+
+  {/* Name Input */}
+  <div className="mb-6">
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      Your Name
+    </label>
+    <input
+      type="text"
+      value={displayName}
+      onChange={(e) => setDisplayName(e.target.value)}
+      placeholder="Enter your name"
+      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+    />
+  </div>
+
+  {/* OTP Input */}
+  <div className="mb-6">
+    <label className="block text-sm font-medium text-gray-700 mb-2">
+      6-Digit Code
+    </label>
+    <input
+      type="text"
+      value={code}
+      onChange={(e) => setCode(e.target.value)}
+      placeholder="123456"
+      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all text-center tracking-widest text-lg"
+      maxLength={6}
+    />
+  </div>
+
+  <button
+    type="submit"
+    className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-xl transition-colors"
+  >
+    Verify
+  </button>
+</form>
       </div>
     </div>
   );

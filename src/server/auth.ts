@@ -52,7 +52,7 @@ authRouter.post('/send-otp', async (req, res) => {
 // ================= VERIFY OTP =================
 authRouter.post('/verify-otp', async (req, res) => {
   try {
-    const { phoneNumber, code } = req.body;
+    const { phoneNumber, code, displayName } = req.body;
 
     if (!phoneNumber || !code) {
       return res.status(400).json({
@@ -99,13 +99,15 @@ authRouter.post('/verify-otp', async (req, res) => {
    if (!user) {
   console.log("🟡 User not found. Creating new user...");
 
-  const insertResult = await db
-    .insert(users)
-    .values({
-      phoneNumber,
-      isOnline: true,
-    })
-    .returning();
+  const { phoneNumber, code, displayName } = req.body;
+ const insertResult = await db
+  .insert(users)
+  .values({
+    phoneNumber,
+    displayName: displayName || phoneNumber,
+    isOnline: true,
+  })
+  .returning();
 
   console.log("✅ User inserted:", insertResult);
 
