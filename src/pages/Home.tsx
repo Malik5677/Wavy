@@ -431,25 +431,29 @@ export default function Home() {
       });
       
       newSocket.on("receive_message", (msg) => {
-         console.log("📥 RECEIVED MESSAGE", msg);
-        if (msg.senderId !== userRef.current?.id) {
-          newSocket.emit("message_delivered", { messageId: msg.id, chatId: msg.chatId });
-        }
+  console.log("📥 RECEIVED MESSAGE", msg);
 
-        setMessages((prev) => {
-          if (activeChatRef.current?.chatId === msg.chatId) {
-            if (msg.senderId !== userRef.current?.id) {
-              newSocket.emit("message_read", { messageId: msg.id, chatId: msg.chatId });
-              return [...prev, { ...msg, isRead: true, isDelivered: true }];
-            }
-            return [...prev, msg];
-          }
-          return prev;
-        });
-        fetchChats();
-      fetchContacts();
-      });
-      
+  if (msg.senderId !== userRef.current?.id) {
+    newSocket.emit("message_delivered", {
+      messageId: msg.id,
+      chatId: msg.chatId,
+    });
+  }
+
+  setMessages((prev) => {
+    // Prevent duplicate messages
+    if (prev.some((m) => m.id === msg.id)) return prev;
+
+    // Only add if this chat is currently open
+    if (activeChatRef.current?.chatId === msg.chatId) {
+      return [...prev, msg];
+    }
+
+    return prev;
+  });
+
+  fetchChats();
+});
       
       newSocket.on("message_delivered", ({ messageId, chatId }) => {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDelivered: true } : m));
@@ -659,7 +663,7 @@ export default function Home() {
     }
     
     try {
-      const res = await fetch('/api/chat/group', {
+      const res = await fetch(`${API_URL}/api/chat/group`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -714,7 +718,7 @@ export default function Home() {
   const handleAcceptCall = async () => {
     if (!incomingCall) return;
     try {
-      await fetch(`/api/call/${incomingCall.id}/status`, {
+      await fetch(`${API_URL}/api/call/${incomingCall.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: 'completed' })
@@ -728,7 +732,7 @@ export default function Home() {
   const handleRejectCall = async () => {
     if (!incomingCall) return;
     try {
-      await fetch(`/api/call/${incomingCall.id}/status`, {
+      await fetch(`${API_URL}/api/call/${incomingCall.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: 'rejected' })
@@ -771,9 +775,9 @@ export default function Home() {
           } else {
             setActiveChat({ chatId });
           }
-          if (socket) {
-            socket.emit("join_chat", chatId);
-          }
+         if (socket) {
+    socket.emit("join_chat", chatId);
+}
         } else {
           // If we got new messages, prepend them
           setMessages(prev => [...data, ...prev]);
@@ -794,7 +798,7 @@ export default function Home() {
   const togglePinChat = async (e: any, chatId: string, isPinned: boolean) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/chat/${chatId}/pin`, {
+      const res = await fetch(`${API_URL}/api/chat/${chatId}/pin`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ isPinned: !isPinned })
@@ -808,7 +812,7 @@ export default function Home() {
 
   const clearChatMessages = async (chatId: string) => {
     try {
-      const res = await fetch(`/api/chat/${chatId}/messages`, {
+      const res = await fetch(`${API_URL}/api/chat/${chatId}/messages`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -823,7 +827,7 @@ export default function Home() {
 
   const deleteChat = async (chatId: string) => {
     try {
-      const res = await fetch(`/api/chat/${chatId}`, {
+      const res = await fetch(`${API_URL}/api/chat/${chatId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

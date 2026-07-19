@@ -126,9 +126,13 @@ async function startServer() {
       console.error("Failed to set online status", e);
     }
 
-    socket.on("join_chat", async (chatId) => {
-      socket.join(`chat_${chatId}`);
-    });
+  socket.on("join_chat", async (chatId) => {
+  console.log("JOIN ROOM", socket.data.userId, chatId);
+
+  await socket.join(`chat_${chatId}`);
+
+  console.log(socket.rooms);
+});
 
     socket.on("send_message", async (data) => {
       const { chatId, content, type, replyToId } = data;
@@ -152,6 +156,7 @@ async function startServer() {
         }
 
         const newMsg = await db.insert(messages).values({
+          console.log("✅ MESSAGE SAVED", newMsg[0]);
           chatId,
           senderId: userId,
           content,
@@ -168,6 +173,7 @@ async function startServer() {
 
         // Broadcast to chat room
         if (!isHidden) {
+          console.log("📤 EMITTING TO ROOM", `chat_${chatId}`);
           io.to(`chat_${chatId}`).emit("receive_message", {
             ...newMsg[0],
             replyToId,
