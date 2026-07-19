@@ -14,6 +14,7 @@ import { GroupCallModal } from '../components/GroupCallModal';
 import { StatusModal } from '../components/StatusModal';
 import { CommunityView } from '../components/CommunityView';
 import { AdminView } from '../components/AdminView';
+import { API_URL } from "../utils/api";
 
 export default function Home() {
   const { user, token, isAuthenticated } = useSelector((state: RootState) => state.auth);
@@ -49,7 +50,7 @@ export default function Home() {
 
   const handleSaveProfile = async () => {
     try {
-      const res = await fetch('/api/user/profile', {
+      const res = await fetch(`${API_URL}/api/user/profile`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify(profileForm)
@@ -96,7 +97,7 @@ export default function Home() {
   
   const saveSettings = async () => {
     try {
-      const res = await fetch('/api/settings/update', {
+      const res = await fetch(`${API_URL}/api/settings/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -129,7 +130,7 @@ export default function Home() {
 
   const saveContact = async (contactId: string, customName: string) => {
     try {
-      const res = await fetch('/api/user/contacts', {
+      const res = await fetch(`${API_URL}/api/user/contacts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ contactId, customName })
@@ -145,7 +146,7 @@ export default function Home() {
   const fetchContacts = async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/user/contacts', {
+      const res = await fetch(`${API_URL}/api/user/contacts`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -157,7 +158,7 @@ export default function Home() {
   const fetchBlockedUsers = async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/users/blocked', {
+      const res = await fetch(`${API_URL}/api/users/blocked`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
@@ -188,7 +189,7 @@ export default function Home() {
   const updateSettings = async (updates: any) => {
     if (!token) return;
     try {
-      await fetch('/api/settings/update', {
+      await fetch(`${API_URL}/api/settings/update`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -206,7 +207,7 @@ export default function Home() {
   const blockUser = async (userId: string) => {
     if (!token) return;
     try {
-      await fetch('/api/users/block', {
+      await fetch(`${API_URL}/api/users/block`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -224,7 +225,7 @@ export default function Home() {
   const unblockUser = async (userId: string) => {
     if (!token) return;
     try {
-      await fetch('/api/users/unblock', {
+      await fetch(`${API_URL}/api/users/unblock`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
@@ -298,7 +299,7 @@ export default function Home() {
   
   useEffect(() => {
     if (token) {
-      fetch('/api/status', { headers: { Authorization: `Bearer ${token}` }})
+     fetch(`${API_URL}/api/status`, {  headers: { Authorization: `Bearer ${token}` }})
         .then(res => { if (!res.ok) throw new Error(); return res.json(); })
         .then(data => setStatuses(data))
         .catch(console.error);
@@ -315,7 +316,7 @@ export default function Home() {
     }
 
     try {
-      const res = await fetch('/api/status', {
+      const res = await fetch(`${API_URL}/api/status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ content: contentPayload, type: statusType })
@@ -327,7 +328,7 @@ export default function Home() {
         setStatusMediaPreview(null);
         setStatusType('text');
         // Refetch
-        fetch('/api/status', { headers: { Authorization: `Bearer ${token}` }})
+       fetch(`${API_URL}/api/status`, {  headers: { Authorization: `Bearer ${token}` }})
           .then(r => { if (!r.ok) throw new Error(); return r.json(); })
           .then(data => setStatuses(data));
       }
@@ -357,7 +358,7 @@ export default function Home() {
 
   const saveProfile = async (field: 'displayName' | 'bio') => {
     try {
-      const res = await fetch('/api/user/profile', {
+      const res = await fetch(`${API_URL}/api/user/profile`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -391,9 +392,10 @@ export default function Home() {
 
   useEffect(() => {
     if (token) {
-      const newSocket = io({
-        auth: { token }
-      });
+      const newSocket = io(API_URL, {
+  auth: { token },
+  transports: ["websocket", "polling"],
+});
       setSocket(newSocket);
       
       newSocket.on("user_status", ({ userId, isOnline, lastSeen }) => {
@@ -546,7 +548,7 @@ export default function Home() {
   const fetchCalls = async () => {
     if (!token) return;
     try {
-      const res = await fetch('/api/call', { headers: { Authorization: `Bearer ${token}` } });
+      const res = await fetch(`${API_URL}/api/call`, { headers: { Authorization: `Bearer ${token}` } });
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
         const data = await res.json();
         setCallHistory(data);
@@ -556,7 +558,7 @@ export default function Home() {
 
   const fetchChats = async () => {
     try {
-      const res = await fetch('/api/chat', {
+      const res = await fetch(`${API_URL}/api/chat`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
@@ -590,7 +592,7 @@ export default function Home() {
       return;
     }
     try {
-      const res = await fetch(`/api/chat/search-users?q=${q}`, {
+      const res = await fetch(`${API_URL}/api/chat/search-users?q=${q}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
@@ -602,7 +604,7 @@ export default function Home() {
   
   const startChat = async (recipientId: string) => {
     try {
-      const res = await fetch('/api/chat/start', {
+      const res = await fetch(`${API_URL}/api/chat/start`, {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -692,7 +694,7 @@ export default function Home() {
   const handleStartCall = async (type: 'audio' | 'video') => {
     if (!activeChat || activeChat.isGroup || !activeChat.otherUser) return;
     try {
-      const res = await fetch('/api/call', {
+      const res = await fetch(`${API_URL}/api/call`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ receiverId: activeChat.otherUser.id, type })
@@ -753,7 +755,7 @@ export default function Home() {
   const fetchChatMessages = async (chatId: string, currentChats?: any[], offset: number = 0) => {
     if (!chatId) return;
     try {
-      const res = await fetch(`/api/chat/${chatId}/messages?offset=${offset}`, {
+      const res = await fetch(`${API_URL}/api/chat/${chatId}/messages?offset=${offset}`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
