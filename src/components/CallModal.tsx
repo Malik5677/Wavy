@@ -40,6 +40,7 @@ export function CallModal({
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
 
   const pendingCandidates = useRef<RTCIceCandidateInit[]>(initialCandidates || []);
+  console.log("📥 Received ICE Candidate", data);
 
   const setupWebRTC = async (answering = false) => {
     console.log(`[WebRTC] setupWebRTC(answering=${answering}), isIncoming=${isIncoming}`);
@@ -76,27 +77,51 @@ export function CallModal({
         ]
       });
       peerConnectionRef.current = pc;
+      pc.onconnectionstatechange = () => {
+  console.log("🟢 Connection State:", pc.connectionState);
+};
+
+pc.oniceconnectionstatechange = () => {
+  console.log("🟡 ICE State:", pc.iceConnectionState);
+};
+
+pc.onicegatheringstatechange = () => {
+  console.log("🔵 ICE Gathering:", pc.iceGatheringState);
+};
+
+pc.onsignalingstatechange = () => {
+  console.log("🟣 Signaling:", pc.signalingState);
+};
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-      pc.ontrack = (event) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
+     pc.ontrack = (event) => {
+  console.log("🎥 Remote Track Received");
+  console.log(event);
+
+  if (remoteVideoRef.current) {
+    remoteVideoRef.current.srcObject = event.streams[0];
+  }
+};
 
       pc.onicecandidate = (event) => {
-        if (event.candidate) {
-          socket.emit('ice_candidate', {
-            toUserId: targetUserId,
-            candidate: event.candidate
-          });
-        }
-      };
+  if (event.candidate) {
+    console.log("📡 Sending ICE Candidate");
+
+    socket.emit("ice_candidate", {
+      toUserId: targetUserId,
+      candidate: event.candidate,
+    });
+  } else {
+    console.log("✅ ICE Gathering Finished");
+  }
+};
 
       if (!isIncoming) {
         // We are calling
         const offer = await pc.createOffer();
+        console.log("📤 OFFER");
+        console.log(offer);
         await pc.setLocalDescription(offer);
         console.log();
         console.log(`[WebRTC] Emitting call_offer to ${targetUserId}`);
@@ -110,6 +135,8 @@ export function CallModal({
       } else if (answering) {
         await pc.setRemoteDescription(new RTCSessionDescription(incomingOffer));
         const answer = await pc.createAnswer();
+        console.log("📥 ANSWER");
+        console.log(answer);
         await pc.setLocalDescription(answer);
         
         // process pending candidates
@@ -142,6 +169,7 @@ export function CallModal({
     
     if (!isIncoming) {
       setupWebRTC();
+      
     }
 
     const handleCallAnswer = async (data: any) => {
