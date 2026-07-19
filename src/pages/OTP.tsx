@@ -5,6 +5,7 @@ import { loginSuccess } from '../redux/authSlice';
 import { RootState } from '../redux/store';
 import toast from 'react-hot-toast';
 import { ShieldCheck } from 'lucide-react';
+import { API_URL } from '../utils/api';
 
 export default function OTP() {
   const [code, setCode] = useState('');
@@ -20,7 +21,7 @@ export default function OTP() {
     }
 
     try {
-      const res = await fetch('/api/auth/verify-otp', {
+      const res = await fetch(`${API_URL}/api/auth/verify-otp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phoneNumber, code }),
