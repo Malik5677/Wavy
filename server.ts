@@ -154,17 +154,21 @@ async function startServer() {
             }
           }
         }
+const newMsg = await db
+  .insert(messages)
+  .values({
+    chatId,
+    senderId: userId,
+    content,
+    type: type || "text",
+    replyToId: replyToId || null,
+    isHidden,
+  })
+  .returning();
 
-        const newMsg = await db.insert(messages).values({
-          console.log("✅ MESSAGE SAVED", newMsg[0]);
-          chatId,
-          senderId: userId,
-          content,
-          type: type || 'text',
-          replyToId: replyToId || null,
-          isHidden
-        }).returning();
-
+console.log("✅ MESSAGE SAVED", newMsg[0]);
+console.log("Sending to room:", `chat_${chatId}`);
+console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
         // Get sender details
         const sender = await db.select().from(users).where(eq(users.id, userId)).limit(1).then(r => r[0]);
 
