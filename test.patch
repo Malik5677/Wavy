@@ -1,0 +1,24 @@
+--- src/components/CallModal.tsx
++++ src/components/CallModal.tsx
+@@ -231,18 +231,18 @@
+           ref={remoteVideoRef}
+           autoPlay 
+           playsInline 
+-          className={`absolute inset-0 w-full h-full object-cover ${(!isVideo || (isIncoming && !callAccepted)) ? 'hidden' : ''}`}
++          className={`absolute inset-0 w-full h-full object-cover ${(!isVideo || !callAccepted) ? 'hidden' : ''}`}
+         />
+         
+         <video 
+           ref={localVideoRef}
+           autoPlay 
+           playsInline 
+           muted
+-          className={`absolute bottom-24 right-8 w-32 h-48 bg-gray-800 rounded-2xl object-cover border-2 border-gray-700 z-10 ${(!isVideo || (isIncoming && !callAccepted)) ? 'hidden' : ''}`}
++          className={`${(!isVideo || (isIncoming && !callAccepted)) ? 'hidden' : ''} ${callAccepted ? 'absolute bottom-24 right-8 w-32 h-48 bg-gray-800 rounded-2xl object-cover border-2 border-gray-700 z-10' : 'absolute inset-0 w-full h-full object-cover'}`}
+         />
+ 
+-        {(!isVideo || (!callAccepted && isIncoming)) && (
++        {(!isVideo || (isIncoming && !callAccepted)) && (
+           <motion.div 
+             initial={{ scale: 0.8, opacity: 0 }}
+             animate={{ scale: 1, opacity: 1 }}

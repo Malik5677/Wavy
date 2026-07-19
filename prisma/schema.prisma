@@ -1,0 +1,28 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String   @id @default(uuid())
+  phoneNumber  String   @unique
+  username     String?  @unique
+  displayName  String?
+  bio          String?
+  profilePhoto String?
+  isOnline     Boolean  @default(false)
+  lastSeen     DateTime @default(now())
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model OtpCode {
+  id          String   @id @default(uuid())
+  phoneNumber String
+  code        String
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+}

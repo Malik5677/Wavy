@@ -1,0 +1,25 @@
+--- src/components/CallModal.tsx
++++ src/components/CallModal.tsx
+@@ -99,15 +99,13 @@
+ 
+     socket.on('ice_candidate', async (data) => {
+-      if (peerConnectionRef.current) {
+-        if (peerConnectionRef.current.remoteDescription) {
+-          try {
+-            await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
+-          } catch(e) {
+-            console.error(e);
+-          }
+-        } else {
+-          pendingCandidates.current.push(data.candidate);
+-        }
++      if (peerConnectionRef.current && peerConnectionRef.current.remoteDescription) {
++        try {
++          await peerConnectionRef.current.addIceCandidate(new RTCIceCandidate(data.candidate));
++        } catch(e) {
++          console.error(e);
++        }
++      } else {
++        pendingCandidates.current.push(data.candidate);
+       }
+     });

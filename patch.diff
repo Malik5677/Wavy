@@ -1,0 +1,28 @@
+--- src/pages/Home.tsx
++++ src/pages/Home.tsx
+@@ -107,6 +107,7 @@
+       if (res.ok) {
+         const data = await res.json();
+         setChats(data);
++        return data;
+       }
+     } catch(err) {}
++    return null;
+   };
+ 
+@@ -137,7 +138,13 @@
+         setSearchQuery('');
+         setSearchResults([]);
+-        await fetchChats();
+-        const openedChat = chats.find(c => c.chatId === data.chatId) || { chatId: data.chatId };
++        const updatedChats = await fetchChats();
++        if (updatedChats) {
++          const openedChat = updatedChats.find((c: any) => c.chatId === data.chatId);
++          if (openedChat) {
++            setActiveChat(openedChat);
++          } else {
++            setActiveChat({ chatId: data.chatId });
++          }
++        }
+         // We'll need to fetch full chat info if it's new, but for MVP let's just trigger a full fetch
+         fetchChatMessages(data.chatId);

@@ -1,0 +1,32 @@
+--- server.ts
++++ server.ts
+@@ -102,6 +102,7 @@
+     });
+ 
+     socket.on("call_offer", (data) => {
++      console.log(`[WebRTC] call_offer from ${userId} to ${data.toUserId}, chat: ${data.chatId}`);
+       io.to(data.toUserId).emit("call_offer", {
+         offer: data.offer,
+         fromUserId: userId,
+@@ -112,18 +113,21 @@
+     });
+ 
+     socket.on("call_answer", (data) => {
++      console.log(`[WebRTC] call_answer from ${userId} to ${data.toUserId}`);
+       io.to(data.toUserId).emit("call_answer", {
+         answer: data.answer,
+       });
+     });
+ 
+     socket.on("ice_candidate", (data) => {
++      console.log(`[WebRTC] ice_candidate from ${userId} to ${data.toUserId}`);
+       io.to(data.toUserId).emit("ice_candidate", {
+         candidate: data.candidate,
+       });
+     });
+ 
+     socket.on("end_call", (data) => {
++      console.log(`[WebRTC] end_call from ${userId} to ${data.toUserId}`);
+       io.to(data.toUserId).emit("end_call");
+     });
+ 

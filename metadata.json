@@ -1,0 +1,11 @@
+{
+  "name": "WaveChat",
+  "description": "A production-ready messaging application similar to WhatsApp with modern architecture, scalable backend, and real-time communication.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

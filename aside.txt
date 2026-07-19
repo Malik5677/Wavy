@@ -1,0 +1,351 @@
+      <aside className="w-[350px] bg-[#111B21] border-r border-[#222E35] flex flex-col">
+        {activeTab === 'chats' && !showArchived && (
+          <>
+            <header className="p-4 flex flex-col shrink-0">
+              <div className="flex justify-between items-center mb-4 mt-2">
+                <h1 className="text-[22px] font-bold tracking-tight text-[#e9edef]">Chats</h1>
+                <div className="flex space-x-1">
+                  <button onClick={() => setActiveTab('new-group')} className="text-[#AEBAC1] hover:bg-[#202C33] p-2 rounded-lg transition-colors" title="New Group">
+                    <Plus size={20} />
+                  </button>
+                  <button className="text-[#AEBAC1] hover:bg-[#202C33] p-2 rounded-lg transition-colors" title="Menu">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"></path></svg>
+                  </button>
+                </div>
+              </div>
+              <div className="relative mb-3">
+                <input 
+                  type="text" 
+                  placeholder="Search or start a new chat" 
+                  value={searchQuery}
+                  onChange={(e) => searchUsers(e.target.value)}
+                  className="w-full bg-[#202C33] border-none rounded-lg py-1.5 pl-10 pr-4 text-sm focus:ring-0 outline-none placeholder-[#8696A0] text-[#e9edef]"
+                />
+                <svg className="w-4 h-4 text-[#8696A0] absolute left-3 top-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+              </div>
+              <div className="flex items-center space-x-2 overflow-x-auto scrollbar-hide pb-1">
+                <button className="px-3 py-1.5 rounded-full text-[13px] font-medium bg-[#0A332C] text-[#00A884] whitespace-nowrap">All</button>
+                <button className="px-3 py-1.5 rounded-full text-[13px] font-medium bg-[#202C33] text-[#8696A0] whitespace-nowrap hover:bg-[#2A3942]">Unread</button>
+                <button className="px-3 py-1.5 rounded-full text-[13px] font-medium bg-[#202C33] text-[#8696A0] whitespace-nowrap hover:bg-[#2A3942]">Favourites</button>
+                <button className="px-3 py-1.5 rounded-full text-[13px] font-medium bg-[#202C33] text-[#8696A0] whitespace-nowrap hover:bg-[#2A3942]">Groups</button>
+              </div>
+            </header>
+
+            {/* Chat List */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="flex items-center space-x-6 px-4 py-3 hover:bg-[#202C33] cursor-pointer mb-2" onClick={() => setShowArchived(true)}>
+                <Archive className="w-5 h-5 text-[#8696A0] shrink-0" />
+                <span className="font-medium text-[#E9EDEF] text-[15px]">Archived</span>
+              </div>
+              {searchQuery ? (
+                <div>
+                  <div className="px-4 py-2 text-xs font-semibold text-[#8696a0] uppercase">Users</div>
+                  {searchResults.map(u => (
+                    <div key={u.id} onClick={() => startChat(u.id)} className="flex items-center gap-3 px-4 py-3 hover:bg-[#202C33] cursor-pointer">
+                      <div className="w-10 h-10 bg-[#374045] rounded-full flex items-center justify-center">
+                        <UserIcon size={20} className="text-[#8696a0]" />
+                      </div>
+                      <div>
+                        <div className="font-medium text-[#E9EDEF]">{u.displayName || u.phoneNumber}</div>
+                      </div>
+                    </div>
+                  ))}
+                  {searchResults.length === 0 && <div className="p-4 text-center text-[#8696a0] text-sm">No users found</div>}
+
+                  <div className="px-4 py-2 mt-2 text-xs font-semibold text-[#8696a0] uppercase border-t border-[#222E35]">Chats</div>
+                  {chats.filter(c => c.name?.toLowerCase().includes(searchQuery.toLowerCase()) || c.lastMessage?.content?.toLowerCase().includes(searchQuery.toLowerCase())).map(chat => (
+                    <div 
+                      key={chat.chatId} 
+                      onClick={() => fetchChatMessages(chat.chatId)}
+                      className={`flex px-4 py-3 cursor-pointer ${activeChat?.chatId === chat.chatId ? 'bg-[#2A3942] border-l-4 border-[#00A884]' : 'hover:bg-[#202C33] border-l-4 border-transparent'}`}
+                    >
+                      <div className="relative w-12 h-12 shrink-0">
+                        <div className="w-full h-full bg-[#374045] rounded-full overflow-hidden flex items-center justify-center font-semibold text-[#E9EDEF]">
+                          {chat.avatar ? <img src={chat.avatar} className="w-full h-full rounded-full object-cover" /> : (chat.name ? chat.name[0].toUpperCase() : <UserIcon size={24}/>)}
+                        </div>
+                        {chat.otherUser && chat.otherUser.isOnline && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#00A884] border-2 border-[#111B21] rounded-full"></div>
+                        )}
+                      </div>
+                      <div className="ml-3 flex-1 overflow-hidden">
+                        <div className="flex justify-between items-baseline mb-0.5">
+                          <h3 className="font-semibold text-[15px] truncate text-[#E9EDEF] font-medium">{chat.name || 'Unknown'}</h3>
+                          {chat.lastMessage && (
+                            <span className={`text-[11px] font-medium ${activeChat?.chatId === chat.chatId ? 'text-[#00A884]' : 'text-[#8696A0]'}`}>
+                              {new Date(chat.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center">
+                          {chat.otherUser && typingUsers[chat.otherUser.id] ? (
+                            <p className="text-sm truncate text-[#00A884] font-medium">typing...</p>
+                          ) : (
+                            <p className={`text-[13px] truncate ${activeChat?.chatId === chat.chatId ? 'text-[#E9EDEF] font-medium' : 'text-[#8696A0]'}`}>
+                              {chat.lastMessage?.type === 'image' ? '📷 Photo' : chat.lastMessage?.type === 'audio' ? '🎤 Voice message' : (chat.lastMessage?.content || 'Started a chat')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div>
+
+                  {chats.filter(c => c.isPinned && !c.isArchived).length > 0 && (
+                    <div className="px-4 py-2 mt-2 text-xs font-semibold text-[#8696a0] uppercase border-t border-[#222E35]">Pinned</div>
+                  )}
+                  {chats.filter(c => !c.isArchived).sort((a,b) => (b.isPinned?1:0) - (a.isPinned?1:0)).map(chat => (
+                    <div 
+                      key={chat.chatId} 
+                      onClick={() => fetchChatMessages(chat.chatId)}
+                      className={`group flex px-4 py-3 cursor-pointer ${activeChat?.chatId === chat.chatId ? 'bg-[#2A3942] border-l-4 border-[#00A884]' : 'hover:bg-[#202C33] border-l-4 border-transparent'}`}
+                    >
+                      <div className="relative w-12 h-12 shrink-0">
+                        <div className="w-full h-full bg-[#374045] rounded-full overflow-hidden flex items-center justify-center font-semibold text-[#E9EDEF]">
+                          {chat.avatar ? <img src={chat.avatar} className="w-full h-full rounded-full object-cover" /> : (chat.name ? chat.name[0].toUpperCase() : <UserIcon size={24}/>)}
+                        </div>
+                        {chat.otherUser && chat.otherUser.isOnline && (
+                          <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#00A884] border-2 border-[#111B21] rounded-full"></div>
+                        )}
+                      </div>
+                      <div className="ml-3 flex-1 overflow-hidden relative">
+                        <div className="flex justify-between items-baseline mb-0.5">
+                          <h3 className="font-semibold text-[15px] truncate text-[#E9EDEF] font-medium">{chat.name || 'Unknown'}</h3>
+                          {chat.lastMessage && (
+                            <span className={`text-[11px] font-medium ${activeChat?.chatId === chat.chatId ? 'text-[#00A884]' : 'text-[#8696A0]'}`}>
+                              {new Date(chat.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex justify-between items-center">
+                          {chat.otherUser && typingUsers[chat.otherUser.id] ? (
+                            <p className="text-sm truncate text-[#00A884] font-medium">typing...</p>
+                          ) : (
+                            <p className={`text-[13px] truncate pr-16 ${activeChat?.chatId === chat.chatId ? 'text-[#E9EDEF] font-medium' : 'text-[#8696A0]'}`}>
+                              {chat.lastMessage?.type === 'image' ? '📷 Photo' : chat.lastMessage?.type === 'audio' ? '🎤 Voice message' : (chat.lastMessage?.content || 'Started a chat')}
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Hover Actions */}
+                        <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-[#202C33] via-[#202C33] to-transparent pl-4 pb-2 pt-2">
+                          <button onClick={(e) => togglePinChat(e, chat.chatId, chat.isPinned)} className="p-1.5 text-[#AEBAC1] hover:text-[#00A884] rounded-full hover:bg-[#374045]" title={chat.isPinned ? "Unpin chat" : "Pin chat"}>
+                            <Pin size={14} className={chat.isPinned ? "fill-[#00A884] text-[#00A884]" : ""} />
+                          </button>
+                          <button onClick={(e) => toggleArchiveChat(e, chat.chatId, chat.isArchived)} className="p-1.5 text-[#AEBAC1] hover:text-[#E9EDEF] rounded-full hover:bg-[#374045]" title="Archive chat">
+                            <Archive size={14} />
+                          </button>
+                        </div>
+                        
+                        {/* Always show pinned icon if pinned and not hovered */}
+                        {chat.isPinned && (
+                          <div className="absolute right-0 top-1/2 -translate-y-1/2 group-hover:opacity-0 transition-opacity">
+                            <Pin size={14} className="text-[#8696A0] fill-[#8696A0]" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                  
+                </div>
+              )}
+            </div>
+          </>
+        )}
+        
+
+        {activeTab === 'calls' && (
+          <div className="flex flex-col h-full bg-[#111B21]">
+            <header className="h-[64px] bg-[#202C33] flex items-center px-6 shrink-0 shadow-sm z-10 border-b border-[#222E35]">
+              <h1 className="text-[19px] font-semibold tracking-tight text-[#E9EDEF]">Calls</h1>
+            </header>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center text-center">
+               <div className="w-20 h-20 bg-[#374045] rounded-full flex items-center justify-center mb-6">
+                 <Phone size={32} className="text-[#00A884] opacity-80" />
+               </div>
+               <h2 className="text-xl font-light text-[#E9EDEF] mb-2">Keep in touch with your friends</h2>
+               <p className="text-[#8696A0] max-w-xs leading-relaxed">Start calling someone by selecting a contact. Group calls are also supported!</p>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'status' && (
+          <div className="flex flex-col h-full bg-[#111B21]">
+            <header className="h-[64px] bg-[#202C33] flex items-center px-6 shrink-0 shadow-sm z-10 border-b border-[#222E35]">
+              <h1 className="text-[19px] font-semibold tracking-tight text-[#E9EDEF]">Status</h1>
+            </header>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="mb-6 bg-[#202C33] p-4 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-[#2A3942] transition" onClick={() => setShowCreateStatus(true)}>
+                <div className="relative">
+                  <div className="w-12 h-12 bg-[#374045] rounded-full flex items-center justify-center overflow-hidden">
+                     {user?.profilePhoto ? <img src={user.profilePhoto} className="w-full h-full object-cover" /> : ((user?.displayName || user?.username) ? (user.displayName || user.username)[0].toUpperCase() : <UserIcon size={24} className="text-[#AEBAC1]"/>)}
+                  </div>
+                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-[#00A884] border-2 border-[#111B21] rounded-full flex items-center justify-center">
+                    <Plus size={10} className="text-white" />
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-[#E9EDEF] font-medium">My status</h3>
+                  <p className="text-sm text-[#8696A0]">Click to add status update</p>
+                </div>
+              </div>
+              
+              <h4 className="text-[#00A884] text-xs font-semibold uppercase tracking-wider mb-4 px-2">Recent updates</h4>
+              
+              <div className="space-y-1">
+                {statuses.length === 0 ? (
+                  <p className="text-[#8696A0] text-sm px-2 italic">No updates right now</p>
+                ) : (
+                  statuses.map(s => (
+                    <div key={s.id} onClick={() => { setIsStatusOpen(true); setActiveStatusUser({ ...s, userName: s.userId === user?.id ? 'You' : 'Someone', statuses: [s] }); }} className="flex items-center gap-4 p-2 hover:bg-[#202C33] rounded-lg cursor-pointer">
+                      <div className="w-12 h-12 rounded-full border-2 border-[#00A884] p-0.5 shrink-0">
+                         <div className="w-full h-full rounded-full bg-[#374045] flex items-center justify-center text-white overflow-hidden">
+                            {s.type === 'text' ? <span className="text-xs">{s.content.substring(0, 10)}</span> : <img src={s.content} className="w-full h-full object-cover" />}
+                         </div>
+                      </div>
+                      <div>
+                        <h3 className="text-[#E9EDEF] font-medium">{s.userId === user?.id ? 'You' : 'Someone'}</h3>
+                        <p className="text-sm text-[#8696A0]">{new Date(s.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'communities' && (
+          <CommunityView token={token!} onOpenChat={(id) => {
+            fetchChatMessages(id);
+            setActiveTab('chats');
+          }} />
+        )}
+        
+        {activeTab === 'admin' && (
+          <AdminView token={token!} />
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="flex flex-col h-full bg-[#111B21]">
+            <header className="h-[108px] bg-[#202C33] flex flex-col justify-end px-6 pb-4 shrink-0 shadow-sm z-10 border-b border-[#222E35]">
+              <div className="flex items-center text-[#E9EDEF]">
+                <h1 className="text-[19px] font-semibold tracking-tight">Settings</h1>
+              </div>
+            </header>
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-6">
+                <div className="flex items-center gap-4 mb-8 cursor-pointer hover:bg-[#202C33] p-4 -mx-4 rounded-xl transition" onClick={() => setShowProfileModal(true)}>
+                  <div className="w-16 h-16 bg-[#374045] rounded-full flex items-center justify-center text-[#E9EDEF] text-xl font-bold overflow-hidden shadow-lg">
+                    {user?.profilePhoto ? <img src={user.profilePhoto} className="w-full h-full object-cover" /> : ((user?.displayName || user?.username) ? (user.displayName || user.username)[0].toUpperCase() : <UserIcon size={32} className="text-[#AEBAC1]"/>)}
+                  </div>
+                  <div>
+                    <h2 className="text-[#E9EDEF] text-xl mb-1">{user?.displayName || user?.username || 'Set Name'}</h2>
+                    <p className="text-[#8696A0] text-sm">{user?.bio || 'Available'}</p>
+                  </div>
+                </div>
+
+                <div className="space-y-1 mb-8">
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <UserIcon size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">Account</div>
+                  </div>
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <Lock size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">Privacy</div>
+                  </div>
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <MessageCircle size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">Chats</div>
+                  </div>
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <Bell size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">Notifications</div>
+                  </div>
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <HardDrive size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">Storage</div>
+                  </div>
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <Globe size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">App language</div>
+                  </div>
+                  <div className="flex items-center gap-6 p-4 hover:bg-[#202C33] rounded-xl cursor-pointer text-[#E9EDEF] transition group">
+                    <HelpCircle size={20} className="text-[#8696A0] group-hover:text-[#E9EDEF]" />
+                    <div className="flex-1 border-b border-[#2A3942] pb-4">Help</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'chats' && showArchived && (
+          <div className="flex flex-col h-full bg-[#111B21]">
+            <header className="h-[108px] bg-[#202C33] flex flex-col justify-end px-6 pb-4 shrink-0 shadow-sm z-10">
+              <div className="flex items-center text-[#E9EDEF]">
+                <button onClick={() => setShowArchived(false)} className="mr-6 hover:text-white transition-colors">
+                  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor"><path d="M12 4l1.4 1.4L7.8 11H20v2H7.8l5.6 5.6L12 20l-8-8 8-8z"></path></svg>
+                </button>
+                <h1 className="text-[19px] font-semibold tracking-tight">Archived</h1>
+              </div>
+            </header>
+            <div className="flex-1 overflow-y-auto">
+                <div className="p-4 text-center">
+                    <p className="text-sm text-[#8696A0] mb-4">These chats stay archived when you receive new messages. Tap to change.</p>
+                </div>
+                {chats.filter(c => c.isArchived).map(chat => (
+                  <div 
+                    key={chat.chatId} 
+                    onClick={() => fetchChatMessages(chat.chatId)}
+                    className={`group flex px-4 py-3 cursor-pointer ${activeChat?.chatId === chat.chatId ? 'bg-[#2A3942] border-l-4 border-[#00A884]' : 'hover:bg-[#202C33] border-l-4 border-transparent'}`}
+                  >
+                    <div className="relative w-12 h-12 shrink-0">
+                      <div className="w-full h-full bg-[#374045] rounded-full overflow-hidden flex items-center justify-center font-semibold text-[#E9EDEF]">
+                        {chat.avatar ? <img src={chat.avatar} className="w-full h-full rounded-full object-cover" /> : (chat.name ? chat.name[0].toUpperCase() : <UserIcon size={24}/>)}
+                      </div>
+                      {chat.otherUser && chat.otherUser.isOnline && (
+                        <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#00A884] border-2 border-[#111B21] rounded-full"></div>
+                      )}
+                    </div>
+                    <div className="ml-3 flex-1 overflow-hidden relative">
+                      <div className="flex justify-between items-baseline mb-0.5">
+                        <h3 className="font-semibold text-[15px] truncate text-[#E9EDEF] font-medium">{chat.name || 'Unknown'}</h3>
+                        {chat.lastMessage && (
+                          <span className={`text-[11px] font-medium ${activeChat?.chatId === chat.chatId ? 'text-[#00A884]' : 'text-[#8696A0]'}`}>
+                            {new Date(chat.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex justify-between items-center">
+                        {chat.otherUser && typingUsers[chat.otherUser.id] ? (
+                          <p className="text-sm truncate text-[#00A884] font-medium">typing...</p>
+                        ) : (
+                          <p className={`text-[13px] truncate pr-16 ${activeChat?.chatId === chat.chatId ? 'text-[#E9EDEF] font-medium' : 'text-[#8696A0]'}`}>
+                            {chat.lastMessage?.type === 'image' ? '📷 Photo' : chat.lastMessage?.type === 'audio' ? '🎤 Voice message' : (chat.lastMessage?.content || 'Started a chat')}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Hover Actions */}
+                      <div className="absolute right-0 top-1/2 -translate-y-1/2 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity bg-gradient-to-l from-[#202C33] via-[#202C33] to-transparent pl-4 pb-2 pt-2">
+                        <button onClick={(e) => toggleArchiveChat(e, chat.chatId, chat.isArchived)} className="p-1.5 text-[#AEBAC1] hover:text-[#E9EDEF] rounded-full hover:bg-[#374045]" title="Unarchive chat">
+                          <Archive size={14} className="fill-[#8696A0]" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+      </aside>
+
+      {/* Chat Detail Main Column */}
+      <main className={`flex-1 flex flex-col relative shadow-inner ${activeChat ? 'bg-[#0B141A]' : 'bg-[#222E35]'}`}>
+        {activeChat ? (
+          <>
+            {/* Header */}
+            <header className="h-[64px] bg-[#202c33] border-b border-[#222E35] flex items-center justify-between px-6 shrink-0 z-10">
