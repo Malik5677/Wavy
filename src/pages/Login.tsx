@@ -36,7 +36,7 @@ export default function Login() {
       return;
     }
 
-    if (!isValidPhoneNumber(phoneNumber)) {
+    if (!isValidPhoneNumber(normalizedPhone)) {
       toast.error('Phone number must be 10 digits and start with 6, 7, 8, or 9');
       return;
     }
@@ -58,7 +58,9 @@ export default function Login() {
         try {
           const error = await res.json();
           errorMsg = error.error || errorMsg;
-        } catch(e) {}
+        } catch (e) {
+          // ignore
+        }
         throw new Error(errorMsg);
       }
       const data = await res.json();
@@ -75,57 +77,51 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#f2f2f2] px-4 py-8">
-      <div className="w-full max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden">
-        <div className="bg-[#00A884] px-8 py-10 text-white text-center">
-          <div className="mx-auto mb-6 w-16 h-16 rounded-full bg-white/15 flex items-center justify-center">
-            <MessageCircle className="w-8 h-8" />
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight">WaveChat</h1>
-          <p className="mt-2 text-sm opacity-90">Secure chat login with phone and email OTP</p>
-        </div>
-
-        <div className="px-8 py-10">
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-[#111827] mb-2">Login to your account</h2>
-            <p className="text-sm text-[#6B7280]">Enter your mobile number and email. OTP will be sent to your email only.</p>
+    <div className="min-h-screen bg-[#f2f7f2] text-[#202c33]">
+      <div className="mx-auto flex min-h-screen items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md rounded-[30px] bg-white p-8 shadow-[0_20px_50px_rgba(0,0,0,0.08)]">
+          <div className="mb-8 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#25d366] text-white shadow-sm">
+              <MessageCircle className="h-8 w-8" />
+            </div>
+            <h1 className="text-3xl font-semibold">WaveChat</h1>
+            <p className="mt-2 text-sm text-[#54656f]">Login with phone or email. OTP is sent to your inbox.</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-5">
             <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Email</label>
+              <label className="mb-2 block text-sm font-medium text-[#202c33]">Phone number</label>
+              <input
+                type="tel"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
+                placeholder="9876543210"
+                className="w-full rounded-[20px] border border-[#d8e1dc] bg-[#f7fbf7] px-4 py-3 text-sm text-[#202c33] outline-none transition focus:border-[#25d366] focus:ring-2 focus:ring-[#25d366]/20"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#202c33]">Email address</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@example.com"
-                className="w-full rounded-3xl border border-[#D1D5DB] px-4 py-3 text-sm outline-none transition focus:border-[#00A884] focus:ring-2 focus:ring-[#00A884]/20"
+                className="w-full rounded-[20px] border border-[#d8e1dc] bg-[#f7fbf7] px-4 py-3 text-sm text-[#202c33] outline-none transition focus:border-[#25d366] focus:ring-2 focus:ring-[#25d366]/20"
               />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[#374151] mb-2">Mobile Number</label>
-              <input
-                type="tel"
-                value={phoneNumber}
-                onChange={(e) => setPhoneNumber(e.target.value)}
-                placeholder="e.g. 9876543210 or +91 9876543210"
-                className="w-full rounded-3xl border border-[#D1D5DB] px-4 py-3 text-sm outline-none transition focus:border-[#00A884] focus:ring-2 focus:ring-[#00A884]/20"
-              />
-              <p className="mt-2 text-xs text-[#6B7280]">Phone number must be 10 digits and start with 6, 7, 8, or 9. Country code is optional.</p>
             </div>
 
             <button
               type="submit"
-              className="w-full rounded-3xl bg-[#00A884] py-3 text-sm font-semibold text-white transition hover:bg-[#01936d]"
+              className="w-full rounded-full bg-[#25d366] px-5 py-3 text-sm font-semibold text-white transition hover:bg-[#1fbf5d]"
             >
               Send OTP
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-[#6B7280]">
-            By continuing, you agree to receive OTP via email only.<br />This is a one-time secure verification step.
-          </div>
+          <p className="mt-6 text-center text-xs text-[#6d7a78]">
+            OTP is delivered by email only.
+          </p>
         </div>
       </div>
     </div>

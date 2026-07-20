@@ -27,6 +27,10 @@ const isValidEmail = (email: string) => {
 };
 
 const createEmailTransporter = () => {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
+  }
+
   return nodemailer.createTransport({
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: Number(process.env.SMTP_PORT || 587),
@@ -77,6 +81,7 @@ authRouter.post('/send-otp', async (req, res) => {
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
+    await db.delete(otpCodes).where(and(eq(otpCodes.phoneNumber, normalizedPhone), eq(otpCodes.email, email)));
     await db.insert(otpCodes).values({
       phoneNumber: normalizedPhone,
       email,
@@ -84,9 +89,8 @@ authRouter.post('/send-otp', async (req, res) => {
       expiresAt,
     });
 
-    let emailResult;
     try {
-      emailResult = await sendEmailOtp(email, code);
+      await sendEmailOtp(email, code);
     } catch (emailError) {
       console.error('Email OTP failed:', emailError);
       return res.status(500).json({ error: 'Failed to send OTP email' });
@@ -97,7 +101,6 @@ authRouter.post('/send-otp', async (req, res) => {
     res.json({
       success: true,
       message: 'OTP sent to email',
-      emailResult,
     });
   } catch (err) {
     console.error('SEND OTP ERROR:', err);
@@ -110,7 +113,7 @@ authRouter.post('/verify-otp', async (req, res) => {
   try {
     const { phoneNumber, email, code, displayName } = req.body;
 
-    if (!phoneNumber || !email || !code) {
+    if (!phoneNumber || !email || !code || typeof code !== 'string') {
       return res.status(400).json({ error: 'Phone number, email, and OTP are required' });
     }
 

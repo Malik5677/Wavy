@@ -1,14 +1,19 @@
+import dotenv from 'dotenv';
+dotenv.config();
+
 import { Client } from 'pg';
 import fs from 'fs';
 import path from 'path';
 
 async function runMigrations() {
-  const client = new Client({
-    user: process.env.SQL_ADMIN_USER,
-    password: process.env.SQL_ADMIN_PASSWORD,
-    host: process.env.SQL_HOST,
-    database: process.env.SQL_DB_NAME,
-  });
+  const client = process.env.DATABASE_URL
+    ? new Client({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } })
+    : new Client({
+        user: process.env.SQL_ADMIN_USER || process.env.SQL_USER,
+        password: process.env.SQL_ADMIN_PASSWORD || process.env.SQL_PASSWORD,
+        host: process.env.SQL_HOST,
+        database: process.env.SQL_DB_NAME,
+      });
 
   try {
     await client.connect();

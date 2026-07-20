@@ -1,4 +1,4 @@
-CREATE TABLE "otp_codes" (
+CREATE TABLE IF NOT EXISTS "otp_codes" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"phone_number" varchar(20) NOT NULL,
 	"code" varchar(6) NOT NULL,
@@ -6,7 +6,7 @@ CREATE TABLE "otp_codes" (
 	"created_at" timestamp DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "users" (
+CREATE TABLE IF NOT EXISTS "users" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"phone_number" varchar(20) NOT NULL,
 	"username" varchar(50),
