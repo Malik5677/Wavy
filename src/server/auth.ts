@@ -153,29 +153,49 @@ const verifyLockState = (record: any) => {
   return new Date() < new Date(record.lockedUntil);
 };
 
-const createEmailTransporter = () => {
+const resolveSmtpHost = async (host: string) => {
+  if (process.env.SMTP_PREFER_IPV4 !== 'true') {
+    return host;
+  }
+
+  try {
+    const addresses = await dns.promises.resolve4(host);
+    if (addresses.length > 0) {
+      return addresses[0];
+    }
+  } catch (error) {
+    console.warn('SMTP IPv4 lookup failed, falling back to host:', host, error);
+  }
+
+  return host;
+};
+
+const createEmailTransporter = async () => {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
   }
 
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const resolvedHost = await resolveSmtpHost(smtpHost);
+  const port = Number(process.env.SMTP_PORT || 465);
+  const secure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
+
   const transporterOptions: any = {
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: Number(process.env.SMTP_PORT || 465),
-    secure: process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true',
+    host: resolvedHost,
+    port,
+    secure,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
     tls: {
       rejectUnauthorized: false,
+      servername: smtpHost,
     },
+    connectionTimeout: 15000,
+    greetingTimeout: 15000,
+    socketTimeout: 15000,
   };
-
-  if (process.env.SMTP_PREFER_IPV4 === 'true') {
-    transporterOptions.lookup = (hostname: string, options: any, callback: any) => {
-      return dns.lookup(hostname, { ...options, family: 4 }, callback);
-    };
-  }
 
   return nodemailer.createTransport(transporterOptions);
 };
@@ -215,7 +235,7 @@ const sendEmailOtp = async (email: string, code: string) => {
     return;
   }
 
-  const transporter = createEmailTransporter();
+  const transporter = await createEmailTransporter();
   const message = {
     from: fromAddress,
     to: email,
