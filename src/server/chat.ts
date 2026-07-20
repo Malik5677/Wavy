@@ -3,6 +3,7 @@ import { db } from '../db';
 import { blockedUsers, users, chats, chatMembers, messages } from '../db/schema';
 import { eq, or, and, desc } from 'drizzle-orm';
 import { authenticate } from './middleware';
+import { applyPrivacyFilters } from './privacy';
 
 export const chatRouter = Router();
 
@@ -130,7 +131,8 @@ chatRouter.get('/search-users', async (req, res) => {
       return Boolean(matchesPhone || matchesName || matchesEmail);
     });
 
-    res.json(filtered.slice(0, 20));
+    const visibleUsers = await Promise.all(filtered.map(async (u) => await applyPrivacyFilters(u, req.user.id)));
+    res.json(visibleUsers.slice(0, 20));
   } catch(err) {
     res.status(500).json({ error: 'Search failed' });
   }

@@ -35,6 +35,7 @@ async function startServer() {
   app.use(helmet({ contentSecurityPolicy: false })); // Disabled for dev with Vite
   app.use(express.json({ limit: "50mb" }));
   app.use(cookieParser());
+  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
   // Rate limiting setup
   const apiLimiter = rateLimit({

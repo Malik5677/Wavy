@@ -3,6 +3,7 @@ import { db } from '../db';
 import { users, statuses } from '../db/schema';
 import { eq, gt, desc } from 'drizzle-orm';
 import { authenticate } from './middleware';
+import { applyPrivacyFilters, canViewStatuses } from './privacy';
 
 export const statusRouter = Router();
 statusRouter.use(authenticate);
@@ -28,12 +29,16 @@ statusRouter.get('/', async (req, res) => {
     .where(gt(statuses.expiresAt, new Date()))
     .orderBy(desc(statuses.createdAt));
 
-    // Group by user
+    // Group by user and apply privacy filters
     const userMap = new Map();
     for (const st of allStatuses) {
+      const canView = await canViewStatuses(st.user, req.user.id);
+      if (!canView) continue;
+
+      const filteredUser = await applyPrivacyFilters(st.user, req.user.id);
       if (!userMap.has(st.userId)) {
         userMap.set(st.userId, {
-          user: st.user,
+          user: filteredUser,
           statuses: []
         });
       }

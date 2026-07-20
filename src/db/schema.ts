@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, boolean, varchar } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, boolean, varchar, integer } from 'drizzle-orm/pg-core';
 
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -24,6 +24,29 @@ export const otpCodes = pgTable('otp_codes', {
   code: varchar('code', { length: 6 }).notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const failedLoginAttempts = pgTable('failed_login_attempts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  phoneNumber: varchar('phone_number', { length: 20 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  attempts: integer('attempts').default(0).notNull(),
+  lockedUntil: timestamp('locked_until'),
+  lastAttempt: timestamp('last_attempt').defaultNow().notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
+export const sessions = pgTable('sessions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  refreshTokenHash: text('refresh_token_hash').notNull(),
+  deviceInfo: varchar('device_info', { length: 255 }),
+  ipAddress: varchar('ip_address', { length: 100 }),
+  userAgent: text('user_agent'),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  lastUsed: timestamp('last_used').defaultNow().notNull(),
+  expiresAt: timestamp('expires_at').notNull(),
+  revoked: boolean('revoked').default(false).notNull(),
 });
 
 export const communities = pgTable('communities', {

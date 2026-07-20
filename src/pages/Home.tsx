@@ -9,6 +9,7 @@ import { motion } from "motion/react";
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import EmojiPicker from 'emoji-picker-react';
+import QRCode from 'qrcode';
 import { CallModal } from '../components/CallModal';
 import { GroupCallModal } from '../components/GroupCallModal';
 import { StatusModal } from '../components/StatusModal';
@@ -66,6 +67,110 @@ export default function Home() {
     }
   };
 
+  const handleUploadAvatar = async (file: File) => {
+    if (!token) return;
+    const formData = new FormData();
+    formData.append('avatar', file);
+
+    try {
+      const res = await fetch(`${API_URL}/api/user/avatar`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      if (!res.ok) {
+        throw new Error('Upload failed');
+      }
+      const data = await res.json();
+      setProfileForm({ ...profileForm, profilePhoto: data.profilePhoto });
+      dispatch(updateUser({ profilePhoto: data.profilePhoto }));
+      toast.success('Avatar uploaded successfully');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to upload avatar');
+    }
+  };
+
+  const generateProfileShare = async () => {
+    if (!user) return;
+    const url = `${window.location.origin}/profile-share/${user.id}`;
+    setProfileShareUrl(url);
+    try {
+      const qrData = await QRCode.toDataURL(url);
+      setQrCodeDataUrl(qrData);
+      setIsShareModalOpen(true);
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to generate QR code');
+    }
+  };
+
+  const downloadJson = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportData = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/user/export?download=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error('Export failed');
+      }
+      const blob = await res.blob();
+      downloadJson(blob, `wavy-export-${user?.id || 'data'}.json`);
+      toast.success('Data export ready');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to export data');
+    }
+  };
+
+  const handleCreateBackup = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/user/backup`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error('Backup failed');
+      }
+      const data = await res.json();
+      setBackupFileName(data.fileName);
+      toast.success('Backup created');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to create backup');
+    }
+  };
+
+  const handleDownloadBackup = async () => {
+    if (!backupFileName || !token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/user/backup/${backupFileName}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        throw new Error('Download failed');
+      }
+      const blob = await res.blob();
+      downloadJson(blob, backupFileName);
+      toast.success('Backup downloaded');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to download backup');
+    }
+  };
+
 
   const [activeCall, setActiveCall] = useState<any>(null);
   const [incomingCall, setIncomingCall] = useState<any>(null);
@@ -94,6 +199,10 @@ export default function Home() {
   const [privacyProfilePhoto, setPrivacyProfilePhoto] = useState(user?.privacyProfilePhoto || 'everyone');
   const [privacyStatus, setPrivacyStatus] = useState(user?.privacyStatus || 'everyone');
   const [wallpaper, setWallpaper] = useState(user?.wallpaper || '');
+  const [profileShareUrl, setProfileShareUrl] = useState('');
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState('');
+  const [backupFileName, setBackupFileName] = useState('');
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   
   const saveSettings = async () => {
     if (!token) return;
@@ -796,7 +905,7 @@ export default function Home() {
 
         if (socket) {
           data.forEach((m: any) => {
-            if (!m.isRead && m.senderId !== user.id) {
+            if (!m.isRead && m.senderId !== user?.id) {
               socket.emit("message_read", { messageId: m.id, chatId });
             }
           });
@@ -1514,6 +1623,22 @@ export default function Home() {
                 >
                   Save Privacy Settings
                 </button>
+                <div className="mt-6 border-t border-[#2A3942] pt-6 space-y-3">
+                  <button onClick={generateProfileShare} className="w-full bg-[#0a6b52] text-[#E9EDEF] px-4 py-3 rounded-xl font-semibold hover:bg-[#0f8f68] transition">
+                    Generate Profile Share QR
+                  </button>
+                  <button onClick={handleExportData} className="w-full bg-[#1a4a6f] text-[#E9EDEF] px-4 py-3 rounded-xl font-semibold hover:bg-[#255f88] transition">
+                    Export My Data
+                  </button>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button onClick={handleCreateBackup} className="w-full bg-[#3b3b3b] text-[#E9EDEF] px-4 py-3 rounded-xl font-semibold hover:bg-[#4b4b4b] transition">
+                      Create Backup
+                    </button>
+                    <button onClick={handleDownloadBackup} disabled={!backupFileName} className="w-full bg-[#00A884] text-[#111B21] px-4 py-3 rounded-xl font-semibold hover:bg-[#008f6f] transition disabled:opacity-50">
+                      Download Backup
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2312,11 +2437,7 @@ export default function Home() {
                       <input type="file" className="hidden" accept="image/*" onChange={(e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onloadend = () => {
-                            setProfileForm({ ...profileForm, profilePhoto: reader.result as string });
-                          };
-                          reader.readAsDataURL(file);
+                          handleUploadAvatar(file);
                         }
                       }} />
                     </label>
@@ -2349,6 +2470,32 @@ export default function Home() {
       )}
 
 
+
+      {isShareModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-[#111B21] w-full max-w-lg rounded-3xl shadow-xl border border-[#222E35] overflow-hidden">
+            <div className="p-5 border-b border-[#222E35] flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-[#E9EDEF]">Share profile</h2>
+              <button onClick={() => setIsShareModalOpen(false)} className="text-[#8696A0] hover:text-[#E9EDEF]"><X size={22} /></button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="rounded-3xl bg-[#202C33] p-4">
+                <p className="text-sm text-[#8696A0]">Share link</p>
+                <div className="mt-2 flex gap-2 items-center">
+                  <input readOnly value={profileShareUrl} className="flex-1 bg-[#111B21] border border-[#2A3942] rounded-xl px-4 py-3 text-sm text-[#E9EDEF]" />
+                  <button onClick={() => { navigator.clipboard.writeText(profileShareUrl); toast.success('Link copied'); }} className="bg-[#00A884] px-4 py-2 rounded-xl text-[#111B21] font-semibold">Copy</button>
+                </div>
+              </div>
+              {qrCodeDataUrl && (
+                <div className="rounded-3xl bg-[#202C33] p-4 text-center">
+                  <img src={qrCodeDataUrl} alt="Profile QR Code" className="mx-auto max-w-full" />
+                  <p className="mt-3 text-sm text-[#8696A0]">Scan this QR code to open the shared profile.</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {showContactModal.isOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">

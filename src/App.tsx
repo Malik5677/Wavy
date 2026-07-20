@@ -12,6 +12,7 @@ import { API_URL } from './utils/api';
 import Login from './pages/Login';
 import OTP from './pages/OTP';
 import Home from './pages/Home';
+import ProfileShare from './pages/ProfileShare';
 import { ErrorBoundary } from './components/ErrorBoundary';
 
 function AppContent() {
@@ -51,6 +52,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/verify-otp" element={<OTP />} />
+        <Route path="/profile-share/:userId" element={<ProfileShare />} />
         <Route path="/" element={<Home />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
