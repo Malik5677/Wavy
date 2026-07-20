@@ -154,7 +154,16 @@ const verifyLockState = (record: any) => {
   return new Date() < new Date(record.lockedUntil);
 };
 
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
+const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465;
+const SMTP_PREFER_IPV4 = process.env.SMTP_PREFER_IPV4 === 'true';
+
 const resolveSmtpHost = async (host: string) => {
+  if (!SMTP_PREFER_IPV4 || net.isIP(host)) {
+    return host;
+  }
+
   try {
     const addresses = await dns.promises.resolve4(host);
     if (addresses.length > 0) {
@@ -167,18 +176,17 @@ const resolveSmtpHost = async (host: string) => {
   return host;
 };
 
-const createEmailTransporter = async (hostOverride?: string) => {
+const buildTransportOptions = async (options?: { host?: string; port?: number; secure?: boolean }) => {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
   }
 
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const targetHost = hostOverride || smtpHost;
-  const resolvedHost = net.isIP(targetHost) ? targetHost : await resolveSmtpHost(targetHost);
-  const port = Number(process.env.SMTP_PORT || 587);
-  const secure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
+  const smtpHost = options?.host || SMTP_HOST;
+  const port = options?.port ?? SMTP_PORT;
+  const secure = options?.secure ?? SMTP_SECURE;
+  const resolvedHost = await resolveSmtpHost(smtpHost);
 
-  const transporterOptions: any = {
+  return {
     host: resolvedHost,
     port,
     secure,
@@ -188,13 +196,17 @@ const createEmailTransporter = async (hostOverride?: string) => {
     },
     tls: {
       rejectUnauthorized: false,
-      servername: smtpHost,
+      servername: SMTP_HOST,
     },
+    requireTLS: !secure,
     connectionTimeout: 15000,
     greetingTimeout: 15000,
     socketTimeout: 15000,
   };
+};
 
+const createEmailTransporter = async (options?: { host?: string; port?: number; secure?: boolean }) => {
+  const transporterOptions = await buildTransportOptions(options);
   return nodemailer.createTransport(transporterOptions);
 };
 
@@ -208,24 +220,55 @@ const sendEmailOtp = async (email: string, code: string) => {
     html: `<p>Your WaveChat OTP is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`,
   };
 
-  try {
-    const transporter = await createEmailTransporter();
-    return await transporter.sendMail(message);
-  } catch (error: any) {
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const retryHost = await resolveSmtpHost(smtpHost);
-    if (retryHost !== smtpHost) {
-      console.warn('Retrying SMTP send via IPv4 host:', retryHost, error);
-      const retryTransporter = await createEmailTransporter(retryHost);
-      return retryTransporter.sendMail(message);
-    }
-    throw error;
+  const attempts: Array<{ name: string; options: { host: string; port: number; secure: boolean }; error?: any }> = [];
+
+  const primaryOptions = { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE };
+  const fallbackOptions = [] as Array<{ name: string; options: { host: string; port: number; secure: boolean } }>;
+
+  if (SMTP_PREFER_IPV4 && !net.isIP(SMTP_HOST)) {
+    fallbackOptions.push({ name: 'ipv4', options: { host: await resolveSmtpHost(SMTP_HOST), port: SMTP_PORT, secure: SMTP_SECURE } });
   }
+
+  if (SMTP_PORT === 465 || SMTP_SECURE) {
+    fallbackOptions.push({ name: 'starttls', options: { host: SMTP_HOST, port: 587, secure: false } });
+  } else {
+    fallbackOptions.push({ name: 'ssl', options: { host: SMTP_HOST, port: 465, secure: true } });
+  }
+
+  const trySend = async (options: { host: string; port: number; secure: boolean }) => {
+    const transporter = await createEmailTransporter(options);
+    return transporter.sendMail(message);
+  };
+
+  try {
+    return await trySend(primaryOptions);
+  } catch (error: any) {
+    attempts.push({ name: 'primary', options: primaryOptions, error });
+  }
+
+  for (const fallback of fallbackOptions) {
+    const { name, options } = fallback;
+    if (name === 'ipv4' && options.host === SMTP_HOST) continue;
+    try {
+      console.warn(`SMTP fallback attempt: ${name}`, options);
+      return await trySend(options);
+    } catch (error: any) {
+      attempts.push({ name, options, error });
+    }
+  }
+
+  const messageDetails = attempts.map((attempt) => {
+    return `${attempt.name}(${attempt.options.host}:${attempt.options.port}, secure=${attempt.options.secure}): ${attempt.error?.message || 'unknown error'}`;
+  }).join(' | ');
+
+  const error = new Error(`SMTP delivery failed after ${attempts.length} attempts: ${messageDetails}`);
+  console.error(error);
+  throw error;
 };
 
-const testSmtpConnection = async () => {
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const port = Number(process.env.SMTP_PORT || 587);
+const testSmtpConnection = async (host?: string, port?: number) => {
+  const smtpHost = host || SMTP_HOST;
+  const smtpPort = port ?? SMTP_PORT;
   const socket = new net.Socket();
 
   return new Promise<{ success: boolean; details: string }>((resolve) => {
@@ -236,24 +279,24 @@ const testSmtpConnection = async () => {
     socket.on('connect', () => {
       settled = true;
       socket.destroy();
-      resolve({ success: true, details: `TCP connection successful to ${smtpHost}:${port}` });
+      resolve({ success: true, details: `TCP connection successful to ${smtpHost}:${smtpPort}` });
     });
 
     socket.on('timeout', () => {
       if (settled) return;
       settled = true;
       socket.destroy();
-      resolve({ success: false, details: `TCP connection timed out to ${smtpHost}:${port}` });
+      resolve({ success: false, details: `TCP connection timed out to ${smtpHost}:${smtpPort}` });
     });
 
     socket.on('error', (err: any) => {
       if (settled) return;
       settled = true;
       socket.destroy();
-      resolve({ success: false, details: `TCP connection failed to ${smtpHost}:${port}: ${err.message}` });
+      resolve({ success: false, details: `TCP connection failed to ${smtpHost}:${smtpPort}: ${err.message}` });
     });
 
-    socket.connect(port, smtpHost);
+    socket.connect(smtpPort, smtpHost);
   });
 };
 
@@ -314,20 +357,29 @@ authRouter.post('/send-otp', async (req, res) => {
 // ================= SMTP DEBUG =================
 authRouter.get('/debug-smtp', async (_req, res) => {
   try {
-    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-    const smtpPort = Number(process.env.SMTP_PORT || 587);
-    const useSecure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
-    const hostToResolve = net.isIP(smtpHost) ? smtpHost : smtpHost;
-    const resolvedHost = await resolveSmtpHost(hostToResolve);
-    const tcpResult = await testSmtpConnection();
+    const currentHost = SMTP_PREFER_IPV4 && !net.isIP(SMTP_HOST) ? await resolveSmtpHost(SMTP_HOST) : SMTP_HOST;
+    const tcpResult = await testSmtpConnection(currentHost, SMTP_PORT);
+    let verifyResult = { success: false, details: 'not verified' };
+
+    try {
+      const transporter = await createEmailTransporter({ host: currentHost, port: SMTP_PORT, secure: SMTP_SECURE });
+      await transporter.verify();
+      verifyResult = { success: true, details: `SMTP verify succeeded for ${currentHost}:${SMTP_PORT}` };
+    } catch (verifyError: any) {
+      verifyResult = { success: false, details: `SMTP verify failed: ${verifyError.message}` };
+    }
 
     res.json({
       success: true,
-      smtpHost,
-      resolvedHost,
-      smtpPort,
-      useSecure,
+      smtpConfig: {
+        host: SMTP_HOST,
+        resolvedHost: currentHost,
+        port: SMTP_PORT,
+        secure: SMTP_SECURE,
+        preferIPv4: SMTP_PREFER_IPV4,
+      },
       tcpResult,
+      verifyResult,
     });
   } catch (err: any) {
     console.error('SMTP DEBUG ERROR:', err);
