@@ -154,10 +154,6 @@ const verifyLockState = (record: any) => {
 };
 
 const resolveSmtpHost = async (host: string) => {
-  if (process.env.SMTP_PREFER_IPV4 !== 'true') {
-    return host;
-  }
-
   try {
     const addresses = await dns.promises.resolve4(host);
     if (addresses.length > 0) {
@@ -170,14 +166,14 @@ const resolveSmtpHost = async (host: string) => {
   return host;
 };
 
-const createEmailTransporter = async () => {
+const createEmailTransporter = async (hostOverride?: string) => {
   if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
     throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
   }
 
-  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
-  const resolvedHost = await resolveSmtpHost(smtpHost);
-  const port = Number(process.env.SMTP_PORT || 465);
+  const smtpHost = hostOverride || process.env.SMTP_HOST || 'smtp.gmail.com';
+  const resolvedHost = hostOverride ? smtpHost : await resolveSmtpHost(smtpHost);
+  const port = Number(process.env.SMTP_PORT || 587);
   const secure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
 
   const transporterOptions: any = {
@@ -201,41 +197,7 @@ const createEmailTransporter = async () => {
 };
 
 const sendEmailOtp = async (email: string, code: string) => {
-  const fromAddress = process.env.SMTP_FROM || process.env.SENDGRID_FROM || process.env.SMTP_USER;
-
-  if (process.env.SENDGRID_API_KEY) {
-    const payload = {
-      personalizations: [
-        {
-          to: [{ email }],
-          subject: 'WaveChat OTP Verification',
-        },
-      ],
-      from: { email: fromAddress },
-      content: [
-        { type: 'text/plain', value: `Your WaveChat OTP is ${code}. It expires in 10 minutes.` },
-        { type: 'text/html', value: `<p>Your WaveChat OTP is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>` },
-      ],
-    };
-
-    const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      const responseText = await response.text();
-      throw new Error(`SendGrid email failed: ${response.status} ${responseText}`);
-    }
-
-    return;
-  }
-
-  const transporter = await createEmailTransporter();
+  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER;
   const message = {
     from: fromAddress,
     to: email,
@@ -243,7 +205,19 @@ const sendEmailOtp = async (email: string, code: string) => {
     text: `Your WaveChat OTP is ${code}. It expires in 10 minutes.`,
     html: `<p>Your WaveChat OTP is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`,
   };
-  return transporter.sendMail(message);
+
+  try {
+    const transporter = await createEmailTransporter();
+    return await transporter.sendMail(message);
+  } catch (error: any) {
+    const retryHost = await resolveSmtpHost(process.env.SMTP_HOST || 'smtp.gmail.com');
+    if (retryHost !== (process.env.SMTP_HOST || 'smtp.gmail.com')) {
+      console.warn('Retrying SMTP send via IPv4 host:', retryHost, error);
+      const transporter = await createEmailTransporter(retryHost);
+      return transporter.sendMail(message);
+    }
+    throw error;
+  }
 };
 
 authRouter.get('/me', authenticate, async (req, res) => {
