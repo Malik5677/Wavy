@@ -18,6 +18,7 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   phoneNumberForOtp: string | null;
+  emailForOtp: string | null;
 }
 
 const initialState: AuthState = {
@@ -25,6 +26,7 @@ const initialState: AuthState = {
   token: localStorage.getItem('token'),
   isAuthenticated: !!localStorage.getItem('token'),
   phoneNumberForOtp: null,
+  emailForOtp: null,
 };
 
 const authSlice = createSlice({
@@ -33,6 +35,10 @@ const authSlice = createSlice({
   reducers: {
     setPhoneNumberForOtp: (state, action: PayloadAction<string>) => {
       state.phoneNumberForOtp = action.payload;
+    },
+    setOtpCredentials: (state, action: PayloadAction<{ phoneNumber: string; email: string }>) => {
+      state.phoneNumberForOtp = action.payload.phoneNumber;
+      state.emailForOtp = action.payload.email;
     },
     loginSuccess: (state, action: PayloadAction<{ user: User; token: string }>) => {
       state.user = action.payload.user;
@@ -44,6 +50,8 @@ const authSlice = createSlice({
       state.user = null;
       state.token = null;
       state.isAuthenticated = false;
+      state.phoneNumberForOtp = null;
+      state.emailForOtp = null;
       localStorage.removeItem('token');
     },
     updateUser: (state, action: PayloadAction<Partial<User>>) => {
@@ -54,5 +62,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { setPhoneNumberForOtp, loginSuccess, logout, updateUser } = authSlice.actions;
+export const { setPhoneNumberForOtp, setOtpCredentials, loginSuccess, logout, updateUser } = authSlice.actions;
 export default authSlice.reducer;

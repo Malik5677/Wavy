@@ -102,12 +102,18 @@ chatRouter.get('/', async (req, res) => {
 });
 
 // Search users to start chat
+const normalizePhoneSearch = (value: string) => {
+  return value.replace(/[^0-9]/g, '').slice(-10);
+};
+
 chatRouter.get('/search-users', async (req, res) => {
-  const query = req.query.q as string;
-  if (!query) return res.json([]);
-  
+  const query = (req.query.q as string) || '';
+  if (!query.trim()) return res.json([]);
+
+  const searchDigits = normalizePhoneSearch(query);
+  const lowerQuery = query.toLowerCase();
+
   try {
-    // Simplistic search (can be improved with ILIKE in raw sql)
     const result = await db.select({
       id: users.id,
       phoneNumber: users.phoneNumber,
@@ -115,14 +121,14 @@ chatRouter.get('/search-users', async (req, res) => {
       username: users.username,
       profilePhoto: users.profilePhoto,
     }).from(users);
-    
-    // In-memory filter for now for simplicity, since drizzle ILIKE can be tricky depending on version
-    const filtered = result.filter(u => 
-      u.id !== req.user.id && 
-      ((u.phoneNumber && u.phoneNumber.includes(query)) || 
-       (u.displayName && u.displayName.toLowerCase().includes(query.toLowerCase())) ||
-       (u.username && u.username.toLowerCase().includes(query.toLowerCase())))
-    );
+
+    const filtered = result.filter(u => {
+      if (u.id === req.user.id) return false;
+      const matchesPhone = searchDigits.length === 10 && u.phoneNumber?.includes(searchDigits);
+      const matchesName = u.displayName?.toLowerCase().includes(lowerQuery);
+      const matchesEmail = u.username?.toLowerCase().includes(lowerQuery);
+      return Boolean(matchesPhone || matchesName || matchesEmail);
+    });
 
     res.json(filtered.slice(0, 20));
   } catch(err) {

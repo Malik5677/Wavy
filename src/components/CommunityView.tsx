@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Megaphone, Plus, ChevronRight, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_URL } from '../utils/api';
 
 export function CommunityView({ token, onOpenChat }: { token: string, onOpenChat?: (chatId: string) => void }) {
   const [communities, setCommunities] = useState<any[]>([]);
@@ -17,7 +18,7 @@ export function CommunityView({ token, onOpenChat }: { token: string, onOpenChat
 
   const fetchCommunities = async () => {
     try {
-      const res = await fetch('/api/community', {
+      const res = await fetch(`${API_URL}/api/community`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -35,7 +36,7 @@ export function CommunityView({ token, onOpenChat }: { token: string, onOpenChat
     if (!newCommName.trim()) return toast.error('Name is required');
     setCreating(true);
     try {
-      const res = await fetch('/api/community', {
+      const res = await fetch(`${API_URL}/api/community`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',

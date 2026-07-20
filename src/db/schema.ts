@@ -20,6 +20,7 @@ export const users = pgTable('users', {
 export const otpCodes = pgTable('otp_codes', {
   id: uuid('id').primaryKey().defaultRandom(),
   phoneNumber: varchar('phone_number', { length: 20 }).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
   code: varchar('code', { length: 6 }).notNull(),
   expiresAt: timestamp('expires_at').notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),

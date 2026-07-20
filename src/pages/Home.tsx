@@ -96,12 +96,13 @@ export default function Home() {
   const [wallpaper, setWallpaper] = useState(user?.wallpaper || '');
   
   const saveSettings = async () => {
+    if (!token) return;
     try {
       const res = await fetch(`${API_URL}/api/settings/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
+          'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify({
           privacyLastSeen,
@@ -699,7 +700,7 @@ export default function Home() {
   
 
   const handleStartCall = async (type: 'audio' | 'video') => {
-    if (!activeChat || activeChat.isGroup || !activeChat.otherUser) return;
+    if (!activeChat || activeChat.isGroup || !activeChat.otherUser || !socket || !token || !user) return;
     try {
       const res = await fetch(`${API_URL}/api/call`, {
         method: 'POST',
@@ -708,9 +709,17 @@ export default function Home() {
       });
       if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
         const data = await res.json();
-        const callData = { id: data.id, callerId: user.id, callerName: user.displayName, receiverId: activeChat.otherUser.id, type, status: 'calling' };
+        const callData = {
+          id: data.id,
+          callerId: user.id,
+          callerName: user.displayName || user.username || 'You',
+          receiverId: activeChat.otherUser.id,
+          targetUserId: activeChat.otherUser.id,
+          type,
+          status: 'calling'
+        };
         setActiveCall(callData);
-        socket.emit("start_call", callData);
+        setIsCalling({ isVideo: type === 'video', name: activeChat.name || 'Unknown', targetUserId: activeChat.otherUser.id, chatId: activeChat.chatId });
       }
     } catch (e) {
       toast.error('Failed to start call');
@@ -718,7 +727,7 @@ export default function Home() {
   };
 
   const handleAcceptCall = async () => {
-    if (!incomingCall) return;
+    if (!incomingCall || !socket || !token) return;
     try {
       await fetch(`${API_URL}/api/call/${incomingCall.id}/status`, {
         method: 'PUT',
@@ -726,34 +735,34 @@ export default function Home() {
         body: JSON.stringify({ status: 'completed' })
       });
       setActiveCall({ ...incomingCall, status: 'connected' });
-      socket.emit("accept_call", { callId: incomingCall.id, callerId: incomingCall.callerId });
+      socket.emit('accept_call', { toUserId: incomingCall.callerId, callId: incomingCall.id });
       setIncomingCall(null);
     } catch (e) {}
   };
 
   const handleRejectCall = async () => {
-    if (!incomingCall) return;
+    if (!incomingCall || !socket || !token) return;
     try {
       await fetch(`${API_URL}/api/call/${incomingCall.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: 'rejected' })
       });
-      socket.emit("reject_call", { callId: incomingCall.id });
+      socket.emit('reject_call', { toUserId: incomingCall.callerId, callId: incomingCall.id });
       setIncomingCall(null);
       fetchCalls();
     } catch (e) {}
   };
 
   const handleEndCall = async () => {
-    if (!activeCall) return;
+    if (!activeCall || !socket || !token) return;
     try {
-      await fetch(`/api/call/${activeCall.id}/status`, {
+      await fetch(`${API_URL}/api/call/${activeCall.id}/status`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ status: 'completed' })
       });
-      socket.emit("end_call", { callId: activeCall.id });
+      socket.emit('end_call', { toUserId: activeCall.targetUserId || activeCall.receiverId, callId: activeCall.id });
       setActiveCall(null);
       fetchCalls();
     } catch (e) {}
@@ -846,7 +855,7 @@ export default function Home() {
   const toggleArchiveChat = async (e: any, chatId: string, isArchived: boolean) => {
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/chat/${chatId}/archive`, {
+      const res = await fetch(`${API_URL}/api/chat/${chatId}/archive`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ isArchived: !isArchived })

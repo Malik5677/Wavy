@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, ShieldAlert, Activity, Trash2, Ban } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { API_URL } from '../utils/api';
 
 export function AdminView({ token, currentUserId, savedContacts = [] }: { token: string, currentUserId?: string, savedContacts?: any[] }) {
   const [stats, setStats] = useState<any>({ totalUsers: 0, totalMessages: 0, activeUsers: 0 });
@@ -13,7 +14,7 @@ export function AdminView({ token, currentUserId, savedContacts = [] }: { token:
 
   const fetchAdminData = async () => {
     try {
-      const res = await fetch('/api/admin/stats', {
+      const res = await fetch(`${API_URL}/api/admin/stats`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.ok) {
@@ -31,7 +32,7 @@ export function AdminView({ token, currentUserId, savedContacts = [] }: { token:
   const handleBanUser = async (userId: string) => {
     if(!confirm("Are you sure you want to ban this user?")) return;
     try {
-      const res = await fetch(`/api/admin/users/${userId}/ban`, {
+      const res = await fetch(`${API_URL}/api/admin/users/${userId}/ban`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` }
       });

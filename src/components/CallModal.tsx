@@ -40,7 +40,6 @@ export function CallModal({
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
 
   const pendingCandidates = useRef<RTCIceCandidateInit[]>(initialCandidates || []);
-  console.log("📥 Received ICE Candidate", data);
 
   const setupWebRTC = async (answering = false) => {
     console.log(`[WebRTC] setupWebRTC(answering=${answering}), isIncoming=${isIncoming}`);
