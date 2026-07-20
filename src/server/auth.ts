@@ -4,10 +4,8 @@ import { failedLoginAttempts, sessions, users, otpCodes } from '../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
 import { authenticate } from './middleware';
-import nodemailer from 'nodemailer';
+import { google } from 'googleapis';
 import crypto from 'crypto';
-import dns from 'dns';
-import net from 'net';
 
 export const authRouter = Router();
 
@@ -154,149 +152,48 @@ const verifyLockState = (record: any) => {
   return new Date() < new Date(record.lockedUntil);
 };
 
-const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
-const SMTP_PORT = Number(process.env.SMTP_PORT || 587);
-const SMTP_SECURE = process.env.SMTP_SECURE === 'true' || SMTP_PORT === 465;
-const SMTP_PREFER_IPV4 = process.env.SMTP_PREFER_IPV4 === 'true';
+const gmailAuth = new google.auth.OAuth2(
+  process.env.GMAIL_CLIENT_ID,
+  process.env.GMAIL_CLIENT_SECRET
+);
 
-const resolveSmtpHost = async (host: string) => {
-  if (!SMTP_PREFER_IPV4 || net.isIP(host)) {
-    return host;
-  }
+gmailAuth.setCredentials({
+  refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+});
 
-  try {
-    const addresses = await dns.promises.resolve4(host);
-    if (addresses.length > 0) {
-      return addresses[0];
-    }
-  } catch (error) {
-    console.warn('SMTP IPv4 lookup failed, falling back to host:', host, error);
-  }
+const gmail = google.gmail({ version: 'v1', auth: gmailAuth });
 
-  return host;
-};
+const buildRawEmail = (to: string, from: string, subject: string, htmlBody: string) => {
+  const message = [
+    `From: ${from}`,
+    `To: ${to}`,
+    `Subject: ${subject}`,
+    'Content-Type: text/html; charset=UTF-8',
+    '',
+    htmlBody,
+  ].join('\r\n');
 
-const buildTransportOptions = async (options?: { host?: string; port?: number; secure?: boolean }) => {
-  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
-    throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
-  }
-
-  const smtpHost = options?.host || SMTP_HOST;
-  const port = options?.port ?? SMTP_PORT;
-  const secure = options?.secure ?? SMTP_SECURE;
-  const resolvedHost = await resolveSmtpHost(smtpHost);
-
-  return {
-    host: resolvedHost,
-    port,
-    secure,
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false,
-      servername: SMTP_HOST,
-    },
-    requireTLS: !secure,
-    connectionTimeout: 15000,
-    greetingTimeout: 15000,
-    socketTimeout: 15000,
-  };
-};
-
-const createEmailTransporter = async (options?: { host?: string; port?: number; secure?: boolean }) => {
-  const transporterOptions = await buildTransportOptions(options);
-  return nodemailer.createTransport(transporterOptions);
+  return Buffer.from(message)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 };
 
 const sendEmailOtp = async (email: string, code: string) => {
-  const fromAddress = process.env.SMTP_FROM || process.env.SMTP_USER;
-  const message = {
-    from: fromAddress,
-    to: email,
-    subject: 'WaveChat OTP Verification',
-    text: `Your WaveChat OTP is ${code}. It expires in 10 minutes.`,
-    html: `<p>Your WaveChat OTP is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`,
-  };
-
-  const attempts: Array<{ name: string; options: { host: string; port: number; secure: boolean }; error?: any }> = [];
-
-  const primaryOptions = { host: SMTP_HOST, port: SMTP_PORT, secure: SMTP_SECURE };
-  const fallbackOptions = [] as Array<{ name: string; options: { host: string; port: number; secure: boolean } }>;
-
-  if (SMTP_PREFER_IPV4 && !net.isIP(SMTP_HOST)) {
-    fallbackOptions.push({ name: 'ipv4', options: { host: await resolveSmtpHost(SMTP_HOST), port: SMTP_PORT, secure: SMTP_SECURE } });
+  const fromAddress = process.env.GMAIL_USER_EMAIL;
+  if (!fromAddress || !process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
+    throw new Error('Gmail API credentials are not fully configured');
   }
 
-  if (SMTP_PORT === 465 || SMTP_SECURE) {
-    fallbackOptions.push({ name: 'starttls', options: { host: SMTP_HOST, port: 587, secure: false } });
-  } else {
-    fallbackOptions.push({ name: 'ssl', options: { host: SMTP_HOST, port: 465, secure: true } });
-  }
+  const htmlContent = `<p>Your WaveChat OTP is <strong>${code}</strong>.</p><p>This code expires in 10 minutes.</p>`;
+  const raw = buildRawEmail(email, fromAddress, 'WaveChat OTP Verification', htmlContent);
 
-  const trySend = async (options: { host: string; port: number; secure: boolean }) => {
-    const transporter = await createEmailTransporter(options);
-    return transporter.sendMail(message);
-  };
-
-  try {
-    return await trySend(primaryOptions);
-  } catch (error: any) {
-    attempts.push({ name: 'primary', options: primaryOptions, error });
-  }
-
-  for (const fallback of fallbackOptions) {
-    const { name, options } = fallback;
-    if (name === 'ipv4' && options.host === SMTP_HOST) continue;
-    try {
-      console.warn(`SMTP fallback attempt: ${name}`, options);
-      return await trySend(options);
-    } catch (error: any) {
-      attempts.push({ name, options, error });
-    }
-  }
-
-  const messageDetails = attempts.map((attempt) => {
-    return `${attempt.name}(${attempt.options.host}:${attempt.options.port}, secure=${attempt.options.secure}): ${attempt.error?.message || 'unknown error'}`;
-  }).join(' | ');
-
-  const error = new Error(`SMTP delivery failed after ${attempts.length} attempts: ${messageDetails}`);
-  console.error(error);
-  throw error;
-};
-
-const testSmtpConnection = async (host?: string, port?: number) => {
-  const smtpHost = host || SMTP_HOST;
-  const smtpPort = port ?? SMTP_PORT;
-  const socket = new net.Socket();
-
-  return new Promise<{ success: boolean; details: string }>((resolve) => {
-    const timeoutMs = 15000;
-    let settled = false;
-
-    socket.setTimeout(timeoutMs);
-    socket.on('connect', () => {
-      settled = true;
-      socket.destroy();
-      resolve({ success: true, details: `TCP connection successful to ${smtpHost}:${smtpPort}` });
-    });
-
-    socket.on('timeout', () => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ success: false, details: `TCP connection timed out to ${smtpHost}:${smtpPort}` });
-    });
-
-    socket.on('error', (err: any) => {
-      if (settled) return;
-      settled = true;
-      socket.destroy();
-      resolve({ success: false, details: `TCP connection failed to ${smtpHost}:${smtpPort}: ${err.message}` });
-    });
-
-    socket.connect(smtpPort, smtpHost);
+  await gmail.users.messages.send({
+    userId: 'me',
+    requestBody: {
+      raw,
+    },
   });
 };
 
@@ -354,36 +251,24 @@ authRouter.post('/send-otp', async (req, res) => {
   }
 });
 
-// ================= SMTP DEBUG =================
-authRouter.get('/debug-smtp', async (_req, res) => {
+// ================= EMAIL DEBUG =================
+authRouter.get('/debug-email', async (_req, res) => {
   try {
-    const currentHost = SMTP_PREFER_IPV4 && !net.isIP(SMTP_HOST) ? await resolveSmtpHost(SMTP_HOST) : SMTP_HOST;
-    const tcpResult = await testSmtpConnection(currentHost, SMTP_PORT);
-    let verifyResult = { success: false, details: 'not verified' };
-
-    try {
-      const transporter = await createEmailTransporter({ host: currentHost, port: SMTP_PORT, secure: SMTP_SECURE });
-      await transporter.verify();
-      verifyResult = { success: true, details: `SMTP verify succeeded for ${currentHost}:${SMTP_PORT}` };
-    } catch (verifyError: any) {
-      verifyResult = { success: false, details: `SMTP verify failed: ${verifyError.message}` };
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN || !process.env.GMAIL_USER_EMAIL) {
+      return res.status(500).json({ success: false, error: 'Gmail API environment variables are not configured' });
     }
 
+    const accessToken = await gmailAuth.getAccessToken();
     res.json({
       success: true,
-      smtpConfig: {
-        host: SMTP_HOST,
-        resolvedHost: currentHost,
-        port: SMTP_PORT,
-        secure: SMTP_SECURE,
-        preferIPv4: SMTP_PREFER_IPV4,
-      },
-      tcpResult,
-      verifyResult,
+      provider: 'gmail-api',
+      email: process.env.GMAIL_USER_EMAIL,
+      accessTokenAvailable: !!accessToken?.token,
+      accessTokenExpiry: accessToken?.res?.data?.expires_in || null,
     });
   } catch (err: any) {
-    console.error('SMTP DEBUG ERROR:', err);
-    res.status(500).json({ error: err.message || 'SMTP debug failed' });
+    console.error('EMAIL DEBUG ERROR:', err);
+    res.status(500).json({ error: err.message || 'Email debug failed' });
   }
 });
 
