@@ -6,6 +6,7 @@ import jwt from 'jsonwebtoken';
 import { authenticate } from './middleware';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
+import dns from 'dns';
 
 export const authRouter = Router();
 
@@ -157,7 +158,7 @@ const createEmailTransporter = () => {
     throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
   }
 
-  return nodemailer.createTransport({
+  const transporterOptions: any = {
     host: process.env.SMTP_HOST || 'smtp.gmail.com',
     port: Number(process.env.SMTP_PORT || 587),
     secure: process.env.SMTP_SECURE === 'true',
@@ -165,7 +166,18 @@ const createEmailTransporter = () => {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
     },
-  });
+    tls: {
+      rejectUnauthorized: false,
+    },
+  };
+
+  if (process.env.SMTP_PREFER_IPV4 === 'true') {
+    transporterOptions.lookup = (hostname: string, options: any, callback: any) => {
+      return dns.lookup(hostname, { ...options, family: 4 }, callback);
+    };
+  }
+
+  return nodemailer.createTransport(transporterOptions);
 };
 
 const sendEmailOtp = async (email: string, code: string) => {
