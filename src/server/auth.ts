@@ -7,6 +7,7 @@ import { authenticate } from './middleware';
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import dns from 'dns';
+import net from 'net';
 
 export const authRouter = Router();
 
@@ -171,8 +172,9 @@ const createEmailTransporter = async (hostOverride?: string) => {
     throw new Error('SMTP_USER and SMTP_PASS must be configured for email delivery');
   }
 
-  const smtpHost = hostOverride || process.env.SMTP_HOST || 'smtp.gmail.com';
-  const resolvedHost = hostOverride ? smtpHost : await resolveSmtpHost(smtpHost);
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const targetHost = hostOverride || smtpHost;
+  const resolvedHost = net.isIP(targetHost) ? targetHost : await resolveSmtpHost(targetHost);
   const port = Number(process.env.SMTP_PORT || 587);
   const secure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
 
@@ -210,14 +212,49 @@ const sendEmailOtp = async (email: string, code: string) => {
     const transporter = await createEmailTransporter();
     return await transporter.sendMail(message);
   } catch (error: any) {
-    const retryHost = await resolveSmtpHost(process.env.SMTP_HOST || 'smtp.gmail.com');
-    if (retryHost !== (process.env.SMTP_HOST || 'smtp.gmail.com')) {
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const retryHost = await resolveSmtpHost(smtpHost);
+    if (retryHost !== smtpHost) {
       console.warn('Retrying SMTP send via IPv4 host:', retryHost, error);
-      const transporter = await createEmailTransporter(retryHost);
-      return transporter.sendMail(message);
+      const retryTransporter = await createEmailTransporter(retryHost);
+      return retryTransporter.sendMail(message);
     }
     throw error;
   }
+};
+
+const testSmtpConnection = async () => {
+  const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+  const port = Number(process.env.SMTP_PORT || 587);
+  const socket = new net.Socket();
+
+  return new Promise<{ success: boolean; details: string }>((resolve) => {
+    const timeoutMs = 15000;
+    let settled = false;
+
+    socket.setTimeout(timeoutMs);
+    socket.on('connect', () => {
+      settled = true;
+      socket.destroy();
+      resolve({ success: true, details: `TCP connection successful to ${smtpHost}:${port}` });
+    });
+
+    socket.on('timeout', () => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ success: false, details: `TCP connection timed out to ${smtpHost}:${port}` });
+    });
+
+    socket.on('error', (err: any) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve({ success: false, details: `TCP connection failed to ${smtpHost}:${port}: ${err.message}` });
+    });
+
+    socket.connect(port, smtpHost);
+  });
 };
 
 authRouter.get('/me', authenticate, async (req, res) => {
@@ -271,6 +308,30 @@ authRouter.post('/send-otp', async (req, res) => {
   } catch (err) {
     console.error('SEND OTP ERROR:', err);
     res.status(500).json({ error: 'Failed to send OTP' });
+  }
+});
+
+// ================= SMTP DEBUG =================
+authRouter.get('/debug-smtp', async (_req, res) => {
+  try {
+    const smtpHost = process.env.SMTP_HOST || 'smtp.gmail.com';
+    const smtpPort = Number(process.env.SMTP_PORT || 587);
+    const useSecure = process.env.SMTP_PORT === '465' || process.env.SMTP_SECURE === 'true';
+    const hostToResolve = net.isIP(smtpHost) ? smtpHost : smtpHost;
+    const resolvedHost = await resolveSmtpHost(hostToResolve);
+    const tcpResult = await testSmtpConnection();
+
+    res.json({
+      success: true,
+      smtpHost,
+      resolvedHost,
+      smtpPort,
+      useSecure,
+      tcpResult,
+    });
+  } catch (err: any) {
+    console.error('SMTP DEBUG ERROR:', err);
+    res.status(500).json({ error: err.message || 'SMTP debug failed' });
   }
 });
 
