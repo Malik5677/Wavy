@@ -5,7 +5,7 @@ import { RootState } from '../redux/store';
 import { useNavigate } from 'react-router-dom';
 import { logout, updateUser } from '../redux/authSlice';
 import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Smile, Clock, AlertCircle, RefreshCw, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical } from 'lucide-react';
-import { motion } from "motion/react";
+import { motion } from 'framer-motion';
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import EmojiPicker from 'emoji-picker-react';
@@ -407,6 +407,7 @@ export default function Home() {
     chatName: string,
     chatId: string,
     isIncoming?: boolean,
+    initiatorId?: string,
   } | null>(null);
   const [isStatusOpen, setIsStatusOpen] = useState(false);
   const [statuses, setStatuses] = useState<any[]>([]);
@@ -606,6 +607,7 @@ export default function Home() {
 
       newSocket.on("message_read", ({ messageId, chatId }) => {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead: true, isDelivered: true, isPending: false } : m));
+      });
 
       newSocket.on("message_edited", ({ messageId, content }) => {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content } : m));
@@ -668,11 +670,11 @@ export default function Home() {
       });
 
       newSocket.on('group_call_rejected', (data) => {
-        toast.info(`User ${data.fromUserId} declined the group call.`);
+        toast(`User ${data.fromUserId} declined the group call.`, { icon: 'ℹ️' });
       });
 
       newSocket.on('group_call_busy', (data) => {
-        toast.info(`User ${data.fromUserId} is busy and cannot join the group call.`);
+        toast(`User ${data.fromUserId} is busy and cannot join the group call.`, { icon: 'ℹ️' });
       });
 
       newSocket.on("ice_candidate", (data) => {

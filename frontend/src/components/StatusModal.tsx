@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, ChevronLeft, ChevronRight } from 'lucide-react';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export function StatusModal({ userName, statuses, onClose }: { userName: string, statuses: any[], onClose: () => void }) {
   const [currentIndex, setCurrentIndex] = useState(0);

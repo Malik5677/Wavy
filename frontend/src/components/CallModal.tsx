@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Phone, Video, Mic, MicOff, VideoOff, PhoneOff, User, PhoneCall, Lock } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Socket } from 'socket.io-client';
 import { ringtonePlayer } from '../utils/audio';
 

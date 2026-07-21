@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PhoneOff, Mic, MicOff, Video, VideoOff, Users, Lock } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 import { Socket } from 'socket.io-client';
 import { ringtonePlayer } from '../utils/audio';
 
@@ -260,6 +260,12 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
       if (s > 59) { s = 0; m++; }
       setStatus(`${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`);
     }, 1000);
+  };
+
+  const acceptCall = async () => {
+    if (endedRef.current) return;
+    ringtonePlayer.stop();
+    await startCall();
   };
 
   const participants = Object.values(remoteStreams);

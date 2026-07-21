@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+const isRootBuild = process.env.ROOT_PROJECT === 'true';
+const outDir = isRootBuild ? path.resolve(__dirname, '../dist') : path.resolve(__dirname, 'dist');
+
 export default defineConfig(() => {
   return {
     plugins: [react(), tailwindcss()],
@@ -19,7 +22,7 @@ export default defineConfig(() => {
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
     build: {
-      outDir: path.resolve(__dirname, '../dist'),
+      outDir,
     },
   };
 });
