@@ -181,7 +181,7 @@ const buildRawEmail = (to: string, from: string, subject: string, htmlBody: stri
 };
 
 const sendEmailOtp = async (email: string, code: string) => {
-  const fromAddress = process.env.GMAIL_USER_EMAIL;
+  const fromAddress = process.env.GMAIL_USER_EMAIL || process.env.GMAIL_USER;
   if (!fromAddress || !process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN) {
     throw new Error('Gmail API credentials are not fully configured');
   }
@@ -254,7 +254,8 @@ authRouter.post('/send-otp', async (req, res) => {
 // ================= EMAIL DEBUG =================
 authRouter.get('/debug-email', async (_req, res) => {
   try {
-    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN || !process.env.GMAIL_USER_EMAIL) {
+    const fromEmail = process.env.GMAIL_USER_EMAIL || process.env.GMAIL_USER;
+    if (!process.env.GMAIL_CLIENT_ID || !process.env.GMAIL_CLIENT_SECRET || !process.env.GMAIL_REFRESH_TOKEN || !fromEmail) {
       return res.status(500).json({ success: false, error: 'Gmail API environment variables are not configured' });
     }
 
@@ -262,7 +263,7 @@ authRouter.get('/debug-email', async (_req, res) => {
     res.json({
       success: true,
       provider: 'gmail-api',
-      email: process.env.GMAIL_USER_EMAIL,
+      email: fromEmail,
       accessTokenAvailable: !!accessToken?.token,
       accessTokenExpiry: accessToken?.res?.data?.expires_in || null,
     });
