@@ -371,9 +371,14 @@ chatRouter.get('/:chatId/messages', async (req, res) => {
       .filter((m: any) => !search || (m.content && m.content.toLowerCase().includes(search)));
 
     res.json(chatMsgs);
-  } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch messages' });
-  }
+ } catch (err) {
+  console.error("❌ FETCH MESSAGES ERROR:", err);
+
+  res.status(500).json({
+    error: "Failed to fetch messages",
+    details: err instanceof Error ? err.message : String(err),
+  });
+}
 });
 
 // Add member to group
