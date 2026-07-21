@@ -321,13 +321,37 @@ chatRouter.get('/:chatId/messages', async (req, res) => {
   const userId = req.user.id;
   const offset = parseInt(req.query.offset as string) || 0;
   const search = (req.query.search as string || '').trim().toLowerCase();
-  
+
+  const hasColumn = async (tableName: string, columnName: string) => {
+    const result: any = await db.execute(sql`
+      SELECT 1 FROM information_schema.columns
+      WHERE table_name = ${tableName} AND column_name = ${columnName}
+      LIMIT 1
+    `);
+    return Array.isArray(result?.rows) ? result.rows.length > 0 : !!result?.rowCount;
+  };
+
+  const hasTable = async (tableName: string) => {
+    const result: any = await db.execute(sql`
+      SELECT 1 FROM information_schema.tables
+      WHERE table_name = ${tableName}
+      LIMIT 1
+    `);
+    return Array.isArray(result?.rows) ? result.rows.length > 0 : !!result?.rowCount;
+  };
+
   try {
     if (!await isUserChatMember(userId, chatId)) {
       return res.status(403).json({ error: 'Access denied' });
     }
 
-    const chatMsgsRaw = await db.select({
+    const hasIsHidden = await hasColumn('messages', 'is_hidden');
+    const hasIsDeleted = await hasColumn('messages', 'is_deleted');
+    const hasReaction = await hasColumn('messages', 'reaction');
+    const hasReplyToId = await hasColumn('messages', 'reply_to_id');
+    const hasStarredMessages = await hasTable('starred_messages');
+
+    const selectFields: any = {
       id: messages.id,
       chatId: messages.chatId,
       senderId: messages.senderId,
@@ -336,33 +360,48 @@ chatRouter.get('/:chatId/messages', async (req, res) => {
       isRead: messages.isRead,
       isDelivered: messages.isDelivered,
       createdAt: messages.createdAt,
-      isDeleted: messages.isDeleted,
-      isHidden: messages.isHidden,
-      reaction: messages.reaction,
-      replyToId: messages.replyToId,
       senderName: users.displayName,
       senderPhone: users.phoneNumber,
-      isStarred: sql`CASE WHEN ${starredMessages.id} IS NULL THEN false ELSE true END`
-    })
-    .from(messages)
-    .innerJoin(users, eq(messages.senderId, users.id))
-    .leftJoin(starredMessages, and(eq(starredMessages.messageId, messages.id), eq(starredMessages.userId, userId)))
-    .where(and(
-      eq(messages.chatId, chatId),
-      or(
-        eq(messages.isHidden, false),
-        eq(messages.senderId, userId)
-      )
-    ))
-    .orderBy(desc(messages.createdAt))
-    .limit(50)
-    .offset(offset);
-    
+      isDeleted: hasIsDeleted ? messages.isDeleted : sql`false`,
+      isHidden: hasIsHidden ? messages.isHidden : sql`false`,
+      reaction: hasReaction ? messages.reaction : sql`NULL`,
+      replyToId: hasReplyToId ? messages.replyToId : sql`NULL`,
+      isStarred: hasStarredMessages ? sql`CASE WHEN ${starredMessages.id} IS NULL THEN false ELSE true END` : sql`false`
+    };
+
+    let messageQuery: any = db.select(selectFields)
+      .from(messages)
+      .innerJoin(users, eq(messages.senderId, users.id));
+
+    if (hasStarredMessages) {
+      messageQuery = messageQuery.leftJoin(
+        starredMessages,
+        and(eq(starredMessages.messageId, messages.id), eq(starredMessages.userId, userId))
+      );
+    }
+
+    if (hasIsHidden) {
+      messageQuery = messageQuery.where(and(
+        eq(messages.chatId, chatId),
+        or(
+          eq(messages.isHidden, false),
+          eq(messages.senderId, userId)
+        )
+      ));
+    } else {
+      messageQuery = messageQuery.where(eq(messages.chatId, chatId));
+    }
+
+    const chatMsgsRaw = await messageQuery
+      .orderBy(desc(messages.createdAt))
+      .limit(50)
+      .offset(offset);
+
     // We reverse because we fetched newest 50, but UI needs oldest to newest (top to bottom)
     chatMsgsRaw.reverse();
-    
+
     const chatMsgs = chatMsgsRaw
-      .map(m => ({
+      .map((m: any) => ({
         ...m,
         sender: {
           name: m.senderName || m.senderPhone
@@ -371,14 +410,14 @@ chatRouter.get('/:chatId/messages', async (req, res) => {
       .filter((m: any) => !search || (m.content && m.content.toLowerCase().includes(search)));
 
     res.json(chatMsgs);
- } catch (err) {
-  console.error("❌ FETCH MESSAGES ERROR:", err);
+  } catch (err) {
+    console.error("❌ FETCH MESSAGES ERROR:", err);
 
-  res.status(500).json({
-    error: "Failed to fetch messages",
-    details: err instanceof Error ? err.message : String(err),
-  });
-}
+    res.status(500).json({
+      error: "Failed to fetch messages",
+      details: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 // Add member to group
