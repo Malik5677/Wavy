@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db';
 import { calls, users } from '../db/schema';
 import { eq, or, desc } from 'drizzle-orm';
-import { authenticate } from './middleware';
+import { authenticate } from '../middleware';
 
 export const callRouter = Router();
 callRouter.use(authenticate);

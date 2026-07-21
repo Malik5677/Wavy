@@ -6,8 +6,8 @@ import jwt from 'jsonwebtoken';
 import { db } from '../db';
 import { users, contacts, chatMembers, chats, messages, statuses, blockedUsers } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
-import { authenticate } from './middleware';
-import { applyPrivacyFilters } from './privacy';
+import { authenticate } from '../middleware';
+import { applyPrivacyFilters } from '../utils/privacy';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'wavechat-super-secret-key';
 

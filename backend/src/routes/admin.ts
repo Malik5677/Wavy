@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db';
 import { users, messages } from '../db/schema';
 import { eq, desc } from 'drizzle-orm';
-import { authenticate } from './middleware';
+import { authenticate } from '../middleware';
 
 export const adminRouter = Router();
 

@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { db } from '../db';
 import { users, statuses } from '../db/schema';
 import { eq, gt, desc } from 'drizzle-orm';
-import { authenticate } from './middleware';
-import { applyPrivacyFilters, canViewStatuses } from './privacy';
+import { authenticate } from '../middleware';
+import { applyPrivacyFilters, canViewStatuses } from '../utils/privacy';
 
 export const statusRouter = Router();
 statusRouter.use(authenticate);

@@ -2,8 +2,8 @@ import { Router } from 'express';
 import { db } from '../db';
 import { blockedUsers, users, chats, chatMembers, messages } from '../db/schema';
 import { eq, or, and, desc } from 'drizzle-orm';
-import { authenticate } from './middleware';
-import { applyPrivacyFilters } from './privacy';
+import { authenticate } from '../middleware';
+import { applyPrivacyFilters } from '../utils/privacy';
 
 export const chatRouter = Router();
 

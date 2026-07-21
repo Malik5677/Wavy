@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { db } from '../db';
 import { users, communities, communityMembers, chats, chatMembers, messages } from '../db/schema';
 import { eq, or, and, desc } from 'drizzle-orm';
-import { authenticate } from './middleware';
+import { authenticate } from '../middleware';
 
 export const communityRouter = Router();
 communityRouter.use(authenticate);

@@ -3,7 +3,7 @@ import { db } from '../db';
 import { failedLoginAttempts, sessions, users, otpCodes } from '../db/schema';
 import { eq, desc, and } from 'drizzle-orm';
 import jwt from 'jsonwebtoken';
-import { authenticate } from './middleware';
+import { authenticate } from '../middleware';
 import { google } from 'googleapis';
 import crypto from 'crypto';
 
