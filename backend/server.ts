@@ -573,9 +573,10 @@ app.get('/api/users/blocked', authenticate, async (req: any, res) => {
 });
 
 // Vite middleware for development
-  const frontendRoot = path.join(process.cwd(), '../frontend');
-  const distPath = path.join(process.cwd(), '../dist');
-
+  const frontendRoot = process.env.NODE_ENV !== 'production'
+    ? path.join(process.cwd(), '../frontend')
+    : path.join(process.cwd(), 'frontend');
+  const distPath = path.join(process.cwd(), 'dist');
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       root: frontendRoot,
