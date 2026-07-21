@@ -152,16 +152,17 @@ const verifyLockState = (record: any) => {
   return new Date() < new Date(record.lockedUntil);
 };
 
-const gmailAuth = new google.auth.OAuth2(
+const oauth2Client = new google.auth.OAuth2(
   process.env.GMAIL_CLIENT_ID,
-  process.env.GMAIL_CLIENT_SECRET
+  process.env.GMAIL_CLIENT_SECRET,
+  "https://developers.google.com/oauthplayground"
 );
 
-gmailAuth.setCredentials({
+oauth2Client.setCredentials({
   refresh_token: process.env.GMAIL_REFRESH_TOKEN,
 });
 
-const gmail = google.gmail({ version: 'v1', auth: gmailAuth });
+const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
 const buildRawEmail = (to: string, from: string, subject: string, htmlBody: string) => {
   const message = [
@@ -259,7 +260,7 @@ authRouter.get('/debug-email', async (_req, res) => {
       return res.status(500).json({ success: false, error: 'Gmail API environment variables are not configured' });
     }
 
-    const accessToken = await gmailAuth.getAccessToken();
+    const accessToken = await oauth2Client.getAccessToken();
     res.json({
       success: true,
       provider: 'gmail-api',
