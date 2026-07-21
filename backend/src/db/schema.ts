@@ -136,3 +136,10 @@ export const contacts = pgTable('contacts', {
   customName: varchar('custom_name', { length: 100 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
+
+export const starredMessages = pgTable('starred_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id).notNull(),
+  messageId: uuid('message_id').references(() => messages.id).notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});

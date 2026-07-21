@@ -20,12 +20,15 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
   const [callAccepted, setCallAccepted] = useState(false);
   const [micOn, setMicOn] = useState(true);
   const [videoOn, setVideoOn] = useState(isVideo);
+  const [busyParticipants, setBusyParticipants] = useState<string[]>([]);
+  const [rejectedParticipants, setRejectedParticipants] = useState<string[]>([]);
   
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
   
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
   const peersRef = useRef<Record<string, RTCPeerConnection>>({});
+  const pendingIceCandidates = useRef<Record<string, RTCIceCandidateInit[]>>({});
   const durationInterval = useRef<NodeJS.Timeout | null>(null);
   const endedRef = useRef(false);
 
@@ -49,6 +52,15 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
       const pc = createPeer(data.fromUserId, false);
       peersRef.current[data.fromUserId] = pc;
       await pc.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const queued = pendingIceCandidates.current[data.fromUserId] || [];
+      for (const candidate of queued) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (err) {
+          console.warn("Error adding queued ICE candidate", err, candidate);
+        }
+      }
+      delete pendingIceCandidates.current[data.fromUserId];
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
       socket.emit("group_call_answer", { toUserId: data.fromUserId, answer, chatId });
@@ -64,12 +76,21 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
 
     const handleGroupIceCandidate = async (data: { fromUserId: string, candidate: any }) => {
       const pc = peersRef.current[data.fromUserId];
-      if (pc && pc.remoteDescription) {
+      if (pc && pc.remoteDescription && pc.remoteDescription.type) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
         } catch(e) {
-          console.error("Error adding ice candidate", e);
+          console.warn("Error adding ice candidate", e);
+          pendingIceCandidates.current[data.fromUserId] = [
+            ...(pendingIceCandidates.current[data.fromUserId] || []),
+            data.candidate
+          ];
         }
+      } else {
+        pendingIceCandidates.current[data.fromUserId] = [
+          ...(pendingIceCandidates.current[data.fromUserId] || []),
+          data.candidate
+        ];
       }
     };
 
@@ -85,11 +106,23 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
       }
     };
 
+    const handleGroupCallBusy = (data: { fromUserId: string, chatId: string }) => {
+      setBusyParticipants(prev => Array.from(new Set([...prev, data.fromUserId])));
+      setStatus('Some participants are busy');
+    };
+
+    const handleGroupCallRejected = (data: { fromUserId: string, chatId: string, reason: string }) => {
+      setRejectedParticipants(prev => Array.from(new Set([...prev, data.fromUserId])));
+      setStatus('Some participants declined the call');
+    };
+
     socket.on('group_peer_joined', handleGroupPeerJoined);
     socket.on('group_call_offer', handleGroupOffer);
     socket.on('group_call_answer', handleGroupAnswer);
     socket.on('group_ice_candidate', handleGroupIceCandidate);
     socket.on('group_peer_left', handleGroupPeerLeft);
+    socket.on('group_call_busy', handleGroupCallBusy);
+    socket.on('group_call_rejected', handleGroupCallRejected);
 
     return () => {
       cleanupCall();
@@ -98,6 +131,8 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
       socket.off('group_call_answer', handleGroupAnswer);
       socket.off('group_ice_candidate', handleGroupIceCandidate);
       socket.off('group_peer_left', handleGroupPeerLeft);
+      socket.off('group_call_busy', handleGroupCallBusy);
+      socket.off('group_call_rejected', handleGroupCallRejected);
     };
   }, []);
 
@@ -162,13 +197,9 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
     }
     
     setCallAccepted(true);
+    setStatus(isIncoming ? 'Connecting...' : 'Waiting for members to join...');
     startDuration();
     socket.emit("join_group_call", { chatId, isVideo });
-  };
-
-  const acceptCall = async () => {
-    ringtonePlayer.stop();
-    await startCall();
   };
 
   const cleanupCall = () => {
@@ -188,6 +219,16 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
     endedRef.current = true;
     cleanupCall();
     socket.emit("leave_group_call", { chatId });
+    onClose();
+  };
+
+  const rejectCall = () => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    cleanupCall();
+    if (initiatorId) {
+      socket.emit('group_call_rejected', { toUserId: initiatorId, chatId, reason: 'declined' });
+    }
     onClose();
   };
 
@@ -232,9 +273,20 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
             <span>End-to-end encrypted group call</span>
           </div>
           <h2 className="text-2xl font-medium mb-1 drop-shadow-md">{chatName}</h2>
-          <p className="text-gray-300 drop-shadow-md text-sm flex items-center gap-2">
-            <Users size={14}/> {participants.length + 1} participant(s) • {status}
+          <p className="text-gray-300 drop-shadow-md text-sm flex flex-col items-center gap-2">
+            <span className="inline-flex items-center gap-2"><Users size={14}/> {participants.length + 1} participant(s)</span>
+            <span className="inline-flex items-center gap-2 text-sm text-[#AEBAC1]">{status}</span>
           </p>
+          {(busyParticipants.length > 0 || rejectedParticipants.length > 0) && (
+            <div className="mt-3 flex flex-wrap justify-center gap-2 text-[11px] text-[#E9EDEF]">
+              {busyParticipants.length > 0 && (
+                <span className="bg-[#FBBF24]/15 text-[#FBBF24] px-3 py-1 rounded-full">{busyParticipants.length} busy</span>
+              )}
+              {rejectedParticipants.length > 0 && (
+                <span className="bg-[#F87171]/15 text-[#F87171] px-3 py-1 rounded-full">{rejectedParticipants.length} declined</span>
+              )}
+            </div>
+          )}
         </div>
 
         {callAccepted ? (
@@ -267,6 +319,15 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
                 </div>
               </div>
             ))}
+            {remoteStreams && Object.keys(remoteStreams).length === 0 && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-6">
+                <div className="w-14 h-14 rounded-full bg-white/10 flex items-center justify-center mb-4">
+                  <Users className="w-7 h-7 text-[#AEBAC1]" />
+                </div>
+                <p className="text-sm text-[#E9EDEF] mb-2">Waiting for participants to join...</p>
+                <p className="text-xs text-[#8696A0]">Everyone will appear here once they accept the call.</p>
+              </div>
+            )}
           </div>
         ) : (
            <div className="absolute inset-0 flex items-center justify-center z-10 bg-gray-900">
@@ -287,7 +348,7 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
             <button onClick={acceptCall} className="w-14 h-14 rounded-full bg-[#25D366] hover:bg-[#20bd5a] flex items-center justify-center shadow-lg transition-transform hover:scale-105">
               <Video className="w-6 h-6 text-white" />
             </button>
-            <button onClick={handleEndCall} className="w-14 h-14 rounded-full bg-[#EA4335] hover:bg-[#d33c30] flex items-center justify-center shadow-lg transition-transform hover:scale-105">
+            <button onClick={rejectCall} className="w-14 h-14 rounded-full bg-[#EA4335] hover:bg-[#d33c30] flex items-center justify-center shadow-lg transition-transform hover:scale-105">
               <PhoneOff className="w-6 h-6 text-white" />
             </button>
           </>

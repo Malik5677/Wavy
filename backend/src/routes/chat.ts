@@ -1,13 +1,34 @@
 import { Router } from 'express';
 import { db } from '../db';
-import { blockedUsers, users, chats, chatMembers, messages } from '../db/schema';
-import { eq, or, and, desc } from 'drizzle-orm';
+import { blockedUsers, users, chats, chatMembers, messages, starredMessages } from '../db/schema';
+import { eq, or, and, desc, sql } from 'drizzle-orm';
 import { authenticate } from '../middleware';
 import { applyPrivacyFilters } from '../utils/privacy';
 
 export const chatRouter = Router();
 
 chatRouter.use(authenticate);
+
+const isUserChatMember = async (userId: string, chatId: string) => {
+  const member = await db.select().from(chatMembers).where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId))).limit(1);
+  return member.length > 0;
+};
+
+const getMessageDetails = async (messageId: string) => {
+  const msg = await db.select({ senderId: messages.senderId, chatId: messages.chatId }).from(messages).where(eq(messages.id, messageId)).limit(1);
+  return msg[0] ?? null;
+};
+
+const isMessageOwner = async (messageId: string, userId: string) => {
+  const msg = await getMessageDetails(messageId);
+  if (!msg) return null;
+  return msg.senderId === userId ? msg : null;
+};
+
+const isMessageInChat = async (messageId: string, chatId: string) => {
+  const msg = await getMessageDetails(messageId);
+  return msg?.chatId === chatId;
+};
 
 // Get all chats for the user
 chatRouter.get('/', async (req, res) => {
@@ -138,6 +159,43 @@ chatRouter.get('/search-users', async (req, res) => {
   }
 });
 
+chatRouter.get('/starred', async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const starredRows = await db.select({
+      id: messages.id,
+      chatId: messages.chatId,
+      senderId: messages.senderId,
+      content: messages.content,
+      type: messages.type,
+      createdAt: messages.createdAt,
+      isDeleted: messages.isDeleted,
+      isHidden: messages.isHidden,
+      reaction: messages.reaction,
+      replyToId: messages.replyToId,
+      senderName: users.displayName,
+      senderPhone: users.phoneNumber,
+    })
+      .from(messages)
+      .innerJoin(starredMessages, eq(starredMessages.messageId, messages.id))
+      .innerJoin(chatMembers, and(eq(chatMembers.chatId, messages.chatId), eq(chatMembers.userId, userId)))
+      .innerJoin(users, eq(messages.senderId, users.id))
+      .where(eq(starredMessages.userId, userId))
+      .orderBy(desc(messages.createdAt));
+
+    res.json(starredRows.map((row) => ({
+      ...row,
+      isStarred: true,
+      sender: {
+        name: row.senderName || row.senderPhone
+      }
+    })));
+  } catch (err) {
+    console.error('Failed to fetch starred messages', err);
+    res.status(500).json({ error: 'Failed to fetch starred messages' });
+  }
+});
+
 // Start a 1-on-1 chat
 chatRouter.post('/start', async (req, res) => {
   const { recipientId } = req.body;
@@ -212,13 +270,63 @@ chatRouter.post('/group', async (req, res) => {
   }
 });
 
+chatRouter.put('/:chatId/messages/:messageId/star', async (req, res) => {
+  const { chatId, messageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    if (!await isUserChatMember(userId, chatId)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (!await isMessageInChat(messageId, chatId)) {
+      return res.status(400).json({ error: 'Message not found in chat' });
+    }
+
+    const existing = await db.select().from(starredMessages)
+      .where(and(eq(starredMessages.userId, userId), eq(starredMessages.messageId, messageId)))
+      .limit(1);
+    if (existing.length === 0) {
+      await db.insert(starredMessages).values({ userId, messageId });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to star message', err);
+    res.status(500).json({ error: 'Failed to star message' });
+  }
+});
+
+chatRouter.delete('/:chatId/messages/:messageId/star', async (req, res) => {
+  const { chatId, messageId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    if (!await isUserChatMember(userId, chatId)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+    if (!await isMessageInChat(messageId, chatId)) {
+      return res.status(400).json({ error: 'Message not found in chat' });
+    }
+    await db.delete(starredMessages)
+      .where(and(eq(starredMessages.userId, userId), eq(starredMessages.messageId, messageId)));
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Failed to unstar message', err);
+    res.status(500).json({ error: 'Failed to unstar message' });
+  }
+});
+
 // Get messages for a chat
 chatRouter.get('/:chatId/messages', async (req, res) => {
   const { chatId } = req.params;
   const userId = req.user.id;
   const offset = parseInt(req.query.offset as string) || 0;
+  const search = (req.query.search as string || '').trim().toLowerCase();
   
   try {
+    if (!await isUserChatMember(userId, chatId)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
     const chatMsgsRaw = await db.select({
       id: messages.id,
       chatId: messages.chatId,
@@ -233,10 +341,12 @@ chatRouter.get('/:chatId/messages', async (req, res) => {
       reaction: messages.reaction,
       replyToId: messages.replyToId,
       senderName: users.displayName,
-      senderPhone: users.phoneNumber
+      senderPhone: users.phoneNumber,
+      isStarred: sql`CASE WHEN ${starredMessages.id} IS NULL THEN false ELSE true END`
     })
     .from(messages)
     .innerJoin(users, eq(messages.senderId, users.id))
+    .leftJoin(starredMessages, and(eq(starredMessages.messageId, messages.id), eq(starredMessages.userId, userId)))
     .where(and(
       eq(messages.chatId, chatId),
       or(
@@ -251,14 +361,15 @@ chatRouter.get('/:chatId/messages', async (req, res) => {
     // We reverse because we fetched newest 50, but UI needs oldest to newest (top to bottom)
     chatMsgsRaw.reverse();
     
-    // Convert to expected format
-    const chatMsgs = chatMsgsRaw.map(m => ({
-      ...m,
-      sender: {
-        name: m.senderName || m.senderPhone
-      }
-    }));
-    
+    const chatMsgs = chatMsgsRaw
+      .map(m => ({
+        ...m,
+        sender: {
+          name: m.senderName || m.senderPhone
+        }
+      }))
+      .filter((m: any) => !search || (m.content && m.content.toLowerCase().includes(search)));
+
     res.json(chatMsgs);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch messages' });

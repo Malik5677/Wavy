@@ -26,7 +26,7 @@ export function CallModal({
   chatId: string,
   initialCandidates?: any[]
 }) {
-  const [status, setStatus] = useState(isIncoming ? 'Incoming Call...' : 'Calling...');
+  const [status, setStatus] = useState(isIncoming ? 'Incoming call' : 'Calling...');
   const [micOn, setMicOn] = useState(true);
   const [videoOn, setVideoOn] = useState(isVideo);
   const [callAccepted, setCallAccepted] = useState(false);
@@ -228,9 +228,10 @@ pc.onsignalingstatechange = () => {
   const acceptCall = async () => {
     if (!incomingOffer) return;
     ringtonePlayer.stop();
-    setCallAccepted(true);
     setStatus('Connecting...');
     await setupWebRTC(true);
+    setCallAccepted(true);
+    setStatus('Connected');
   };
 
   const startDuration = () => {
@@ -309,12 +310,22 @@ pc.onsignalingstatechange = () => {
         />
 
         <div className={`absolute top-0 left-0 right-0 p-6 pt-12 flex flex-col items-center z-20 ${callAccepted && isVideo ? 'bg-gradient-to-b from-black/60 to-transparent' : ''}`}>
-          <div className="flex items-center space-x-1.5 text-gray-400 text-xs font-medium mb-6 bg-gray-900/50 px-3 py-1.5 rounded-full backdrop-blur-sm">
+          <div className="flex items-center space-x-2 text-gray-400 text-xs font-medium mb-4 bg-gray-900/60 px-3 py-1.5 rounded-full backdrop-blur-sm">
             <Lock size={12} />
             <span>End-to-end encrypted</span>
           </div>
-          <h2 className="text-2xl font-medium mb-1 drop-shadow-md">{contactName}</h2>
-          <p className="text-gray-300 drop-shadow-md text-sm">{status}</p>
+          <h2 className="text-2xl font-semibold mb-1 drop-shadow-md">{contactName}</h2>
+          <div className="flex items-center gap-3 text-gray-300 text-sm drop-shadow-md">
+            <span>{status}</span>
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-black/40">
+              {micOn ? 'Mic On' : 'Mic Muted'}
+            </span>
+            {isVideo && (
+              <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-black/40">
+                {videoOn ? 'Camera On' : 'Camera Off'}
+              </span>
+            )}
+          </div>
         </div>
 
         {(!isVideo || (isIncoming && !callAccepted)) && (
@@ -340,7 +351,7 @@ pc.onsignalingstatechange = () => {
               <PhoneCall className="w-6 h-6 text-white" />
             </button>
             <button 
-              onClick={() => handleEndCall(true)}
+              onClick={() => { setStatus('Call declined'); handleEndCall(true); }}
               className="w-14 h-14 rounded-full bg-[#EA4335] hover:bg-[#d33c30] flex items-center justify-center shadow-lg transition-transform hover:scale-105"
             >
               <PhoneOff className="w-6 h-6 text-white" />
@@ -350,7 +361,8 @@ pc.onsignalingstatechange = () => {
           <div className="flex items-center space-x-4 bg-gray-900/60 px-6 py-4 rounded-full backdrop-blur-md">
             <button 
               onClick={toggleMic}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${micOn ? 'bg-gray-800/80 hover:bg-gray-700 text-white' : 'bg-white text-gray-900'}`}
+              className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${micOn ? 'bg-[#00A884] text-white shadow-lg' : 'bg-white text-gray-900'}`}
+              title={micOn ? 'Mute microphone' : 'Unmute microphone'}
             >
               {micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
             </button>
@@ -358,15 +370,17 @@ pc.onsignalingstatechange = () => {
             {isVideo && (
               <button 
                 onClick={toggleVideo}
-                className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${videoOn ? 'bg-gray-800/80 hover:bg-gray-700 text-white' : 'bg-white text-gray-900'}`}
+                className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors ${videoOn ? 'bg-[#00A884] text-white shadow-lg' : 'bg-white text-gray-900'}`}
+                title={videoOn ? 'Turn off camera' : 'Turn on camera'}
               >
                 {videoOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
               </button>
             )}
             
             <button 
-              onClick={() => handleEndCall(true)}
+              onClick={() => { setStatus('Call ended'); handleEndCall(true); }}
               className="w-14 h-14 rounded-full bg-[#EA4335] hover:bg-[#d33c30] flex items-center justify-center shadow-lg ml-2 transition-transform hover:scale-105"
+              title="End call"
             >
               <PhoneOff className="w-6 h-6 text-white" />
             </button>

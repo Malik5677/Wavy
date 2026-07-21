@@ -95,6 +95,17 @@ async function startServer() {
     }
   };
 
+  const isUserInChat = async (userId: string, chatId: string) => {
+    const member = await db.select().from(chatMembers).where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId))).limit(1);
+    return member.length > 0;
+  };
+
+  const isSenderOfMessage = async (messageId: string, userId: string) => {
+    const msg = await db.select({ senderId: messages.senderId, chatId: messages.chatId }).from(messages).where(eq(messages.id, messageId)).limit(1);
+    if (!msg[0]) return null;
+    return msg[0].senderId === userId ? msg[0] : null;
+  };
+
   io.on("connection", async (socket) => {
     console.log("User connected", socket.data.userId);
     const userId = socket.data.userId;
@@ -136,9 +147,12 @@ async function startServer() {
 });
 
     socket.on("send_message", async (data) => {
-      const { chatId, content, type, replyToId } = data;
+      const { chatId, content, type, replyToId, tempId } = data;
       try {
-        console.log("SEND MSG DEBUG", { chatId, userId, type, contentLength: content?.length, replyToId }); 
+        console.log("SEND MSG DEBUG", { chatId, userId, type, contentLength: content?.length, replyToId, tempId }); 
+        if (!await isUserInChat(userId, chatId)) {
+          throw new Error('Not a member of chat');
+        }
         await ensureRoomMembership(chatId);
 
         let isHidden = false;
@@ -177,36 +191,40 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
         await db.update(chats).set({ updatedAt: new Date() }).where(eq(chats.id, chatId));
 
         // Broadcast to chat room
+        const responsePayload = {
+          ...newMsg[0],
+          replyToId,
+          tempId,
+          sender: {
+            name: sender?.displayName || sender?.phoneNumber
+          }
+        };
+
         if (!isHidden) {
           console.log("📤 EMITTING TO ROOM", `chat_${chatId}`);
-          io.to(`chat_${chatId}`).emit("receive_message", {
-            ...newMsg[0],
-            replyToId,
-            sender: {
-              name: sender?.displayName || sender?.phoneNumber
-            }
-          });
+          io.to(`chat_${chatId}`).emit("receive_message", responsePayload);
         } else {
           // Send only to sender
-          socket.emit("receive_message", {
-            ...newMsg[0],
-            replyToId,
-            sender: {
-              name: sender?.displayName || sender?.phoneNumber
-            }
-          });
+          socket.emit("receive_message", responsePayload);
         }
       } catch (err: any) {
         console.error("Failed to send message", err);
-        socket.emit("send_message_error", { error: err.message, stack: err.stack });
+        socket.emit("send_message_error", { error: err.message, stack: err.stack, tempId: data?.tempId });
       }
     });
 
     socket.on("edit_message", async (data) => {
       const { messageId, chatId, content } = data;
       try {
+        const msg = await isSenderOfMessage(messageId, userId);
+        if (!msg) {
+          throw new Error('Not authorized to edit this message');
+        }
+        if (!await isUserInChat(userId, msg.chatId)) {
+          throw new Error('Not a member of chat');
+        }
         await db.update(messages).set({ content }).where(eq(messages.id, messageId));
-        io.to(`chat_${chatId}`).emit("message_edited", { messageId, content });
+        io.to(`chat_${msg.chatId}`).emit("message_edited", { messageId, content });
       } catch (err) {
         console.error("Failed to edit message", err);
       }
@@ -215,8 +233,15 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
     socket.on("delete_message", async (data) => {
       const { messageId, chatId } = data;
       try {
+        const msg = await isSenderOfMessage(messageId, userId);
+        if (!msg) {
+          throw new Error('Not authorized to delete this message');
+        }
+        if (!await isUserInChat(userId, msg.chatId)) {
+          throw new Error('Not a member of chat');
+        }
         await db.update(messages).set({ isDeleted: true }).where(eq(messages.id, messageId));
-        io.to(`chat_${chatId}`).emit("message_deleted", { messageId });
+        io.to(`chat_${msg.chatId}`).emit("message_deleted", { messageId });
       } catch (err) {
         console.error("Failed to delete message", err);
       }
@@ -225,6 +250,9 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
     socket.on("react_message", async (data) => {
       const { messageId, chatId, reaction } = data;
       try {
+        if (!await isUserInChat(userId, chatId)) {
+          throw new Error('Not a member of chat');
+        }
         await db.update(messages).set({ reaction }).where(eq(messages.id, messageId));
         io.to(`chat_${chatId}`).emit("message_reaction", { messageId, reaction, chatId });
       } catch (err) {
@@ -260,18 +288,21 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
 
     socket.on("typing", async (data) => {
       const { chatId } = data;
+      if (!await isUserInChat(userId, chatId)) return;
       await ensureRoomMembership(chatId);
       socket.to(`chat_${chatId}`).emit("typing", { chatId, userId });
     });
 
-    socket.on("stop_typing", (data) => {
+    socket.on("stop_typing", async (data) => {
       const { chatId } = data;
+      if (!await isUserInChat(userId, chatId)) return;
       socket.to(`chat_${chatId}`).emit("stop_typing", { chatId, userId });
     });
 
     socket.on("message_delivered", async (data) => {
       const { messageId, chatId } = data;
       try {
+        if (!await isUserInChat(userId, chatId)) return;
         await db.update(messages).set({ isDelivered: true }).where(eq(messages.id, messageId));
         io.to(`chat_${chatId}`).emit("message_delivered", { messageId, chatId });
       } catch(err) {
@@ -282,6 +313,7 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
     socket.on("message_read", async (data) => {
       const { messageId, chatId } = data;
       try {
+        if (!await isUserInChat(userId, chatId)) return;
         await db.update(messages).set({ isRead: true, isDelivered: true }).where(eq(messages.id, messageId));
         io.to(`chat_${chatId}`).emit("message_read", { messageId, chatId });
       } catch(err) {
@@ -357,6 +389,7 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
       console.log(`[WebRTC] ${userId} ringing group call in chat ${data.chatId}`);
       
       try {
+        if (!await isUserInChat(userId, data.chatId)) return;
         const chat = await db.select().from(chats).where(eq(chats.id, data.chatId)).limit(1).then(r => r[0]);
         if (!chat || !chat.isGroup) return;
 
@@ -372,6 +405,7 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
             io.to(m.userId).emit("incoming_group_call", { 
               chatId: data.chatId,
               chatName: chat.name,
+              callerId: userId,
               callerName: senderName,
               isVideo: data.isVideo
             });
@@ -386,7 +420,6 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
       console.log(`[WebRTC] ${userId} joining group call in chat ${data.chatId}`);
       const room = `group_call_${data.chatId}`;
       socket.join(room);
-      // Notify others in the room
       socket.to(room).emit("group_peer_joined", { userId });
     });
 
@@ -398,6 +431,29 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
 
     socket.on("group_call_offer", (data) => {
       io.to(data.toUserId).emit("group_call_offer", { fromUserId: userId, offer: data.offer });
+    });
+
+    socket.on("group_call_answer", (data) => {
+      io.to(data.toUserId).emit("group_call_answer", { fromUserId: userId, answer: data.answer });
+    });
+
+    socket.on("group_ice_candidate", (data) => {
+      io.to(data.toUserId).emit("group_ice_candidate", { fromUserId: userId, candidate: data.candidate });
+    });
+
+    socket.on("group_call_rejected", (data) => {
+      io.to(data.toUserId).emit("group_call_rejected", {
+        fromUserId: userId,
+        chatId: data.chatId,
+        reason: data.reason || 'declined'
+      });
+    });
+
+    socket.on("group_call_busy", (data) => {
+      io.to(data.toUserId).emit("group_call_busy", {
+        fromUserId: userId,
+        chatId: data.chatId
+      });
     });
 
     socket.on("group_call_answer", (data) => {

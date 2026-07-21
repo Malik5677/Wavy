@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { useNavigate } from 'react-router-dom';
 import { logout, updateUser } from '../redux/authSlice';
-import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Smile, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical } from 'lucide-react';
+import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Smile, Clock, AlertCircle, RefreshCw, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical } from 'lucide-react';
 import { motion } from "motion/react";
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
@@ -353,6 +353,8 @@ export default function Home() {
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatsMenu, setShowChatsMenu] = useState(false);
+  const [showStarredMessages, setShowStarredMessages] = useState(false);
+  const [starredMessages, setStarredMessages] = useState<any[]>([]);
   useEffect(() => {
     const handleClick = () => {
       setContextMenu(null);
@@ -372,6 +374,23 @@ export default function Home() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const createTempMessage = (content: string, type: string, tempId: string, replyToId?: string) => ({
+    id: tempId,
+    tempId,
+    chatId: activeChat?.chatId,
+    senderId: user?.id,
+    senderName: user?.displayName || user?.username || 'You',
+    sender: { name: user?.displayName || user?.username || 'You' },
+    content,
+    type,
+    replyToId: replyToId || null,
+    createdAt: new Date().toISOString(),
+    isDelivered: false,
+    isRead: false,
+    isPending: true,
+    isFailed: false,
+  });
 
   const [isCalling, setIsCalling] = useState<{ 
     isVideo: boolean, 
@@ -541,44 +560,52 @@ export default function Home() {
       });
       
       newSocket.on("receive_message", (msg) => {
-  console.log("📥 RECEIVED MESSAGE", msg);
+        console.log("📥 RECEIVED MESSAGE", msg);
 
-  if (msg.senderId !== userRef.current?.id) {
-    newSocket.emit("message_delivered", {
-      messageId: msg.id,
-      chatId: msg.chatId,
-    });
-  }
+        if (msg.senderId !== userRef.current?.id) {
+          newSocket.emit("message_delivered", {
+            messageId: msg.id,
+            chatId: msg.chatId,
+          });
+        }
 
-  setMessages((prev) => {
-    // Prevent duplicate messages
-    if (prev.some((m) => m.id === msg.id)) return prev;
+        setMessages((prev) => {
+          // Prevent duplicate messages by new DB id
+          if (prev.some((m) => m.id === msg.id)) return prev;
 
-    // Only add if this chat is currently open
-    if (activeChatRef.current?.chatId === msg.chatId) {
-      return [...prev, msg];
-    }
+          if (msg.tempId) {
+            const existingIndex = prev.findIndex((m) => m.tempId === msg.tempId);
+            if (existingIndex !== -1) {
+              const updated = [...prev];
+              updated[existingIndex] = { ...msg, isPending: false, isFailed: false };
+              return updated;
+            }
+          }
 
-    return prev;
-  });
+          // Only add if this chat is currently open
+          if (activeChatRef.current?.chatId === msg.chatId) {
+            return [...prev, { ...msg, isPending: false, isFailed: false }];
+          }
 
-  fetchChats();
-});
+          return prev;
+        });
+
+        fetchChats();
+      });
       
       newSocket.on("message_delivered", ({ messageId, chatId }) => {
-        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDelivered: true } : m));
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isDelivered: true, isPending: false } : m));
       });
-
+      
       
       newSocket.on("messages_delivered", ({ chatId }) => {
         if (activeChatRef.current?.chatId === chatId) {
-          setMessages(prev => prev.map(m => ({ ...m, isDelivered: true })));
+          setMessages(prev => prev.map(m => ({ ...m, isDelivered: true, isPending: false })));
         }
       });
 
       newSocket.on("message_read", ({ messageId, chatId }) => {
-        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead: true } : m));
-      });
+        setMessages(prev => prev.map(m => m.id === messageId ? { ...m, isRead: true, isDelivered: true, isPending: false } : m));
 
       newSocket.on("message_edited", ({ messageId, content }) => {
         setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content } : m));
@@ -602,6 +629,9 @@ export default function Home() {
 
       newSocket.on("send_message_error", (data) => {
         console.error("Server error sending message:", data);
+        if (data?.tempId) {
+          setMessages(prev => prev.map(m => m.tempId === data.tempId ? { ...m, isPending: false, isFailed: true } : m));
+        }
         toast.error(`Error sending message: ${data.error}`);
       });
 
@@ -618,16 +648,31 @@ export default function Home() {
       });
       
       newSocket.on("incoming_group_call", (data) => {
+        if (isGroupCalling) {
+          console.log("Already in a group call, notifying caller busy", data.callerId);
+          newSocket.emit('group_call_busy', { toUserId: data.callerId, chatId: data.chatId });
+          return;
+        }
+
         setIsGroupCalling({
           isVideo: data.isVideo,
           chatName: `${data.chatName} (Started by ${data.callerName})`,
           chatId: data.chatId,
-          isIncoming: true
+          isIncoming: true,
+          initiatorId: data.callerId
         });
       });
 
       newSocket.on("group_call_offer", (data) => {
         // Group offers handled directly in the modal
+      });
+
+      newSocket.on('group_call_rejected', (data) => {
+        toast.info(`User ${data.fromUserId} declined the group call.`);
+      });
+
+      newSocket.on('group_call_busy', (data) => {
+        toast.info(`User ${data.fromUserId} is busy and cannot join the group call.`);
       });
 
       newSocket.on("ice_candidate", (data) => {
@@ -717,6 +762,52 @@ export default function Home() {
         setSearchResults(data);
       }
     } catch(err) { console.error("Error:", err); }
+  };
+
+  const fetchStarredMessages = async () => {
+    if (!token) return;
+    try {
+      const res = await fetch(`${API_URL}/api/chat/starred`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok && res.headers.get('content-type')?.includes('application/json')) {
+        const data = await res.json();
+        setStarredMessages(data);
+        setShowStarredMessages(true);
+        setShowContactInfo(false);
+      }
+    } catch (err) {
+      console.error("Error fetching starred messages:", err);
+      toast.error('Failed to load starred messages');
+    }
+  };
+
+  const toggleStarMessage = async (msg: any) => {
+    if (!token || !msg) return;
+    const chatId = msg.chatId || activeChat?.chatId;
+    if (!chatId) return;
+
+    try {
+      const method = msg.isStarred ? 'DELETE' : 'PUT';
+      const res = await fetch(`${API_URL}/api/chat/${chatId}/messages/${msg.id}/star`, {
+        method,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isStarred: !msg.isStarred } : m));
+        if (showStarredMessages) {
+          fetchStarredMessages();
+        }
+        toast.success(msg.isStarred ? 'Removed starred message' : 'Starred message');
+      } else {
+        const text = await res.text();
+        console.error('Failed to toggle starred message', text);
+        toast.error('Failed to update starred status');
+      }
+    } catch (err) {
+      console.error('Failed to toggle starred message', err);
+      toast.error('Failed to update starred status');
+    }
   };
   
   const startChat = async (recipientId: string) => {
@@ -1004,10 +1095,15 @@ export default function Home() {
             content = JSON.stringify({ name: file.name, data: base64 });
           }
 
+          const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+          const tempMsg = createTempMessage(content, type, tempId, replyingTo?.id);
+          setMessages(prev => [...prev, tempMsg]);
           socket.emit("send_message", {
             chatId: activeChat.chatId,
             content: content,
-            type: type
+            type: type,
+            replyToId: replyingTo?.id,
+            tempId
           });
         }
       };
@@ -1050,14 +1146,18 @@ export default function Home() {
         reader.readAsDataURL(audioBlob);
         reader.onloadend = () => {
           const base64Audio = reader.result;
-          if (socket && activeChat) {
-             socket.emit("send_message", {
-               chatId: activeChat.chatId,
-               content: base64Audio,
-               type: 'audio',
-               replyToId: replyingTo?.id || null
-             });
-             setReplyingTo(null);
+          if (socket && activeChat && user) {
+            const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const tempMsg = createTempMessage(base64Audio as string, 'audio', tempId, replyingTo?.id || null);
+            setMessages(prev => [...prev, tempMsg]);
+            socket.emit("send_message", {
+              chatId: activeChat.chatId,
+              content: base64Audio,
+              type: 'audio',
+              replyToId: replyingTo?.id || null,
+              tempId
+            });
+            setReplyingTo(null);
           }
         };
         stream.getTracks().forEach(track => track.stop());
@@ -1101,10 +1201,23 @@ export default function Home() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const retryMessage = (message: any) => {
+    if (!socket || !activeChat || !message?.tempId || !message?.content) return;
+    const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setMessages(prev => prev.map(m => m.tempId === message.tempId ? { ...m, isPending: true, isFailed: false, tempId } : m));
+    socket.emit("send_message", {
+      chatId: activeChat.chatId,
+      content: message.content,
+      type: message.type,
+      replyToId: message.replyToId,
+      tempId
+    });
+  };
+
   const sendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !activeChat || !socket) return;
-    
+    if (!newMessage.trim() || !activeChat || !socket || !user) return;
+
     if (editingMessageId) {
       socket.emit("edit_message", {
         messageId: editingMessageId,
@@ -1113,14 +1226,18 @@ export default function Home() {
       });
       setEditingMessageId(null);
     } else {
+      const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const tempMsg = createTempMessage(newMessage, 'text', tempId, replyingTo?.id);
+      setMessages(prev => [...prev, tempMsg]);
       socket.emit("send_message", {
         chatId: activeChat.chatId,
         content: newMessage,
         type: 'text',
-        replyToId: replyingTo?.id
+        replyToId: replyingTo?.id,
+        tempId
       });
     }
-    
+
     setNewMessage('');
     setReplyingTo(null);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
@@ -1921,6 +2038,12 @@ export default function Home() {
                     
 
                     <div className={`${isMe ? 'bg-[#00A884] text-[#E9EDEF] rounded-br-none shadow-md' : 'bg-[#202c33] text-[#e9edef] rounded-bl-none shadow-sm'} px-4 py-2 rounded-2xl relative`}>
+                      {msg.isStarred && (
+                        <Star size={14} className="absolute top-2 right-2 text-[#ffd279]" />
+                      )}
+                      {msg.isStarred && (
+                        <Star size={14} className="absolute top-2 right-2 text-[#ffd279]" />
+                      )}
                       {msg.isDeleted ? (
                         <p className="text-sm italic opacity-70 flex items-center"><CircleDashed size={14} className="mr-2" /> This message was deleted</p>
                       ) : (
@@ -1962,14 +2085,34 @@ export default function Home() {
                           ) : (
                             <p className="text-sm">{msg.content}</p>
                           )}
-                          <div className={`flex justify-end items-center mt-1 space-x-1`}>
+                                <div className={`flex justify-end items-center mt-1 space-x-1`}>
                             <span className={`text-[10px] ${isMe ? 'text-white/80' : 'text-[#AEBAC1]'}`}>
                               {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                             {isMe && (
-                              <span className={`w-3 h-3 ml-0.5 ${msg.isRead ? 'text-[#53bdeb]' : 'text-[#8696A0]'}`}>
-                                {msg.isRead ? <CheckCheck size={14} /> : (msg.isDelivered ? <CheckCheck size={14} /> : <Check size={14} />)}
+                              <span className="ml-0.5 flex items-center justify-center"
+                                title={msg.isPending ? 'Sending...' : msg.isFailed ? 'Send failed' : msg.isRead ? 'Read' : msg.isDelivered ? 'Delivered' : 'Sent'}>
+                                {msg.isPending ? (
+                                  <Clock size={14} className="text-[#d1d7db] animate-pulse" />
+                                ) : msg.isFailed ? (
+                                  <AlertCircle size={14} className="text-red-400" />
+                                ) : msg.isRead ? (
+                                  <CheckCheck size={14} className="text-[#53bdeb]" />
+                                ) : msg.isDelivered ? (
+                                  <CheckCheck size={14} className="text-[#AEBAC1]" />
+                                ) : (
+                                  <Check size={14} className="text-[#AEBAC1]" />
+                                )}
                               </span>
+                            )}
+                              {isMe && msg.isFailed && (
+                              <button
+                                type="button"
+                                onClick={() => retryMessage(msg)}
+                                className="text-[10px] text-[#E9EDEF] hover:text-[#00A884] flex items-center gap-1"
+                              >
+                                <RefreshCw size={12} /> Retry
+                              </button>
                             )}
                           </div>
                         </>
@@ -2060,12 +2203,16 @@ export default function Home() {
                 <Smile className="w-6 h-6" />
               </button>
               <button type="button" onClick={() => {
-                if (socket && activeChat) {
+                if (socket && activeChat && user) {
                   const randomGif = `https://media.giphy.com/media/3o7aD2saalEvp4yZsA/giphy.gif`; // simple dummy for MVP
+                  const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                  const tempMsg = createTempMessage(randomGif, 'image', tempId);
+                  setMessages(prev => [...prev, tempMsg]);
                   socket.emit("send_message", {
                     chatId: activeChat.chatId,
                     content: randomGif,
-                    type: 'image'
+                    type: 'image',
+                    tempId
                   });
                 }
               }} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors font-bold text-[10px] bg-[#374045] rounded px-1.5 py-0.5">
@@ -2294,6 +2441,7 @@ export default function Home() {
           chatName={isGroupCalling.chatName}
           isVideo={isGroupCalling.isVideo}
           isIncoming={isGroupCalling.isIncoming}
+          initiatorId={isGroupCalling.initiatorId}
           socket={socket}
           myId={user.id}
           onClose={() => setIsGroupCalling(null)}
@@ -2396,11 +2544,19 @@ export default function Home() {
                   key={chat.chatId} 
                   className="flex items-center space-x-3 p-3 hover:bg-[#202C33] rounded-lg cursor-pointer"
                   onClick={() => {
-                    socket?.emit("send_message", {
-                      chatId: chat.chatId,
-                      content: forwardingMessage.content,
-                      type: forwardingMessage.type
-                    });
+                    if (socket && user) {
+                      const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+                      if (activeChat?.chatId === chat.chatId) {
+                        const tempMsg = createTempMessage(forwardingMessage.content, forwardingMessage.type, tempId, forwardingMessage.replyToId);
+                        setMessages(prev => [...prev, tempMsg]);
+                      }
+                      socket.emit("send_message", {
+                        chatId: chat.chatId,
+                        content: forwardingMessage.content,
+                        type: forwardingMessage.type,
+                        tempId
+                      });
+                    }
                     toast.success('Message forwarded');
                     setForwardingMessage(null);
                   }}
@@ -2527,6 +2683,44 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {showStarredMessages && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div className="bg-[#111B21] w-full max-w-3xl rounded-3xl shadow-xl border border-[#222E35] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[#222E35]">
+              <div>
+                <h2 className="text-xl font-semibold text-[#E9EDEF]">Starred messages</h2>
+                <p className="text-sm text-[#8696A0]">Your starred messages are shown here for quick access.</p>
+              </div>
+              <button onClick={() => setShowStarredMessages(false)} className="text-[#AEBAC1] hover:text-[#E9EDEF]"><X size={24} /></button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto p-4 space-y-3">
+              {starredMessages.length === 0 ? (
+                <div className="text-[#8696A0] text-sm text-center py-20">No starred messages yet.</div>
+              ) : starredMessages.map((msg) => (
+                <div key={msg.id} className="bg-[#202C33] rounded-3xl p-4 border border-[#222E35]">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#8696A0] mb-2">{new Date(msg.createdAt).toLocaleString()}</p>
+                      {msg.type === 'image' ? (
+                        <img src={msg.content} className="w-full max-h-60 rounded-2xl object-cover" alt="starred" />
+                      ) : msg.type === 'audio' ? (
+                        <div className="rounded-2xl bg-[#111B21] p-3">Audio message</div>
+                      ) : msg.type === 'file' ? (
+                        <div className="rounded-2xl bg-[#111B21] p-3">File: {msg.content.startsWith('{') ? JSON.parse(msg.content).name : 'Download'}</div>
+                      ) : (
+                        <p className="text-sm text-[#E9EDEF] whitespace-pre-line">{msg.content}</p>
+                      )}
+                      <p className="mt-3 text-xs text-[#8696A0]">From: {msg.sender?.name || msg.senderName || msg.senderPhone || 'Unknown'}</p>
+                    </div>
+                    <button onClick={() => toggleStarMessage(msg)} className="text-[#ffd279] hover:text-[#fff] text-sm font-semibold">{msg.isStarred ? 'Unstar' : 'Star'}</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
       {/* Context Menu */}
       {contextMenu && (
         <div 
@@ -2569,8 +2763,8 @@ export default function Home() {
           <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setContextMenu(null); }}>
              <Pin size={18} className="text-[#8696A0]" /> <span>Pin</span>
           </button>
-          <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setContextMenu(null); }}>
-             <Star size={18} className="text-[#8696A0]" /> <span>Star</span>
+          <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { if (contextMenu?.msg) { toggleStarMessage(contextMenu.msg); } setContextMenu(null); }}>
+             <Star size={18} className="text-[#8696A0]" /> <span>{contextMenu?.msg?.isStarred ? 'Unstar' : 'Star'}</span>
           </button>
           {contextMenu.msg.senderId === user?.id && (
             <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px] text-red-500" onClick={() => { 
