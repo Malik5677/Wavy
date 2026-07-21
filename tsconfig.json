@@ -15,9 +15,16 @@
     "moduleDetection": "force",
     "allowJs": true,
     "jsx": "react-jsx",
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "drizzle-orm": [
+        "./node_modules/drizzle-orm"
+      ],
+      "drizzle-orm/*": [
+        "./node_modules/drizzle-orm/*"
       ]
     },
     "allowImportingTsExtensions": true,
