@@ -154,10 +154,13 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
     };
 
     pc.ontrack = (event) => {
-      setRemoteStreams(prev => ({
-        ...prev,
-        [userId]: event.streams[0]
-      }));
+      console.log('[WebRTC] Group remote track received for', userId);
+      if (event.streams[0]) {
+        setRemoteStreams(prev => ({
+          ...prev,
+          [userId]: event.streams[0]
+        }));
+      }
     };
 
     if (isInitiator) {
@@ -180,6 +183,10 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.muted = true;
+        localVideoRef.current.play().catch(() => {
+          console.warn('[WebRTC] Local group preview autoplay blocked');
+        });
       }
       return stream;
     } catch (err) {
@@ -234,9 +241,9 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
 
   const toggleMic = () => {
     if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !micOn;
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        audioTracks.forEach(track => (track.enabled = !micOn));
         setMicOn(!micOn);
       }
     }
@@ -244,9 +251,9 @@ export function GroupCallModal({ chatId, chatName, isVideo, socket, onClose, isI
 
   const toggleVideo = () => {
     if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoOn;
+      const videoTracks = localStreamRef.current.getVideoTracks();
+      if (videoTracks.length > 0) {
+        videoTracks.forEach(track => (track.enabled = !videoOn));
         setVideoOn(!videoOn);
       }
     }
@@ -383,6 +390,9 @@ function VideoPlayer({ stream }: { stream: MediaStream }) {
   useEffect(() => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
+      ref.current.play().catch(() => {
+        console.warn('[WebRTC] Remote group video autoplay blocked');
+      });
     }
   }, [stream]);
   return (

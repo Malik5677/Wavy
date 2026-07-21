@@ -67,6 +67,10 @@ export function CallModal({
       localStreamRef.current = stream;
       if (localVideoRef.current && isVideo) {
         localVideoRef.current.srcObject = stream;
+        localVideoRef.current.muted = true;
+        localVideoRef.current.play().catch(() => {
+          console.warn('[WebRTC] Local preview autoplay blocked');
+        });
       }
 
       const pc = new RTCPeerConnection({
@@ -95,14 +99,16 @@ pc.onsignalingstatechange = () => {
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
      pc.ontrack = (event) => {
-  console.log("🎥 Remote Track Received");
-  console.log(event);
+        console.log("🎥 Remote Track Received");
+        console.log(event);
 
-  if (remoteVideoRef.current) {
-    remoteVideoRef.current.srcObject = event.streams[0];
-  }
-};
-
+        if (remoteVideoRef.current) {
+          remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.play().catch(() => {
+            console.warn('[WebRTC] Remote autoplay blocked');
+          });
+        }
+      };
       pc.onicecandidate = (event) => {
   if (event.candidate) {
     console.log("📡 Sending ICE Candidate");
@@ -273,9 +279,9 @@ pc.onsignalingstatechange = () => {
 
   const toggleMic = () => {
     if (localStreamRef.current) {
-      const audioTrack = localStreamRef.current.getAudioTracks()[0];
-      if (audioTrack) {
-        audioTrack.enabled = !micOn;
+      const audioTracks = localStreamRef.current.getAudioTracks();
+      if (audioTracks.length > 0) {
+        audioTracks.forEach(track => (track.enabled = !micOn));
         setMicOn(!micOn);
       }
     }
@@ -283,9 +289,9 @@ pc.onsignalingstatechange = () => {
 
   const toggleVideo = () => {
     if (localStreamRef.current) {
-      const videoTrack = localStreamRef.current.getVideoTracks()[0];
-      if (videoTrack) {
-        videoTrack.enabled = !videoOn;
+      const videoTracks = localStreamRef.current.getVideoTracks();
+      if (videoTracks.length > 0) {
+        videoTracks.forEach(track => (track.enabled = !videoOn));
         setVideoOn(!videoOn);
       }
     }
@@ -298,6 +304,7 @@ pc.onsignalingstatechange = () => {
           ref={remoteVideoRef}
           autoPlay 
           playsInline 
+          muted={false}
           className={`absolute inset-0 w-full h-full object-cover ${(!isVideo || !callAccepted) ? 'hidden' : ''}`}
         />
         
