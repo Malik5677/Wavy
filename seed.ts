@@ -1,5 +1,5 @@
-import { db } from './src/db';
-import { users, chats, chatMembers, messages } from './src/db/schema';
+import { db } from './backend/src/db';
+import { users, chats, chatMembers, messages } from './backend/src/db/schema';
 import { eq } from 'drizzle-orm';
 
 async function main() {

@@ -52,7 +52,7 @@ function AppContent() {
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/verify-otp" element={<OTP />} />
-        <Route path="/profile-share/:userId" element={<ProfileShare />} />
+        <Route path="/profile-share/:shareId" element={<ProfileShare />} />
         <Route path="/" element={<Home />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

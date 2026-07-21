@@ -517,14 +517,17 @@ app.get('/api/users/blocked', authenticate, async (req: any, res) => {
 });
 
 // Vite middleware for development
+  const frontendRoot = path.join(process.cwd(), '../frontend');
+  const distPath = path.join(process.cwd(), '../dist');
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
+      root: frontendRoot,
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));

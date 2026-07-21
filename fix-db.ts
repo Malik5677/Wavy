@@ -1,4 +1,4 @@
-import { db } from "./src/db";
+import { db } from "./backend/src/db";
 import { sql } from "drizzle-orm";
 async function run() {
   await db.execute(sql`ALTER TABLE messages ADD COLUMN reply_to_id uuid;`);
