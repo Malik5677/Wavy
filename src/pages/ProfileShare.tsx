@@ -17,11 +17,12 @@ export default function ProfileShare() {
     const fetchProfile = async () => {
       if (!userId) return;
       try {
+        const apiUrl = API_URL || window.location.origin;
         const headers: Record<string, string> = {};
         if (token) {
           headers.Authorization = `Bearer ${token}`;
         }
-        const res = await fetch(`${API_URL}/api/user/share/${userId}`, { headers });
+        const res = await fetch(`${apiUrl}/api/user/share/${userId}`, { headers });
 
         if (!res.ok) {
           const error = await res.json().catch(() => null);
@@ -46,7 +47,7 @@ export default function ProfileShare() {
     };
 
     fetchProfile();
-  }, [navigate, token, userId]);
+  }, [token, userId]);
 
   if (loading) {
     return (
