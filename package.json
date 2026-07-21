@@ -7,8 +7,8 @@
     "dev": "cd backend && tsx server.ts",
     "dev:backend": "cd backend && tsx server.ts",
     "dev:frontend": "cd frontend && vite",
-    "build": "cd frontend && cross-env ROOT_PROJECT=true npm run build && esbuild ../backend/server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=../dist/server.cjs",
-    "start": "cross-env NODE_ENV=production node dist/server.cjs",
+    "build": "cd frontend && npm install && npm exec -- cross-env ROOT_PROJECT=true npm run build && npm exec -- esbuild ../backend/server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=../dist/server.cjs",
+    "start": "npm exec -- cross-env NODE_ENV=production node dist/server.cjs",
     "preview": "cd frontend && vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit"
