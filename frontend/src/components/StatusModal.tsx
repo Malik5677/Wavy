@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { X, ChevronLeft, ChevronRight, Heart, MessageCircle, Send } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-export function StatusModal({ userName, statuses, onClose }: { userName: string, statuses: any[], onClose: () => void }) {
+export function StatusModal({ userName, statuses, onClose, onReply, onLike, likes, likedIds }: { userName: string, statuses: any[], onClose: () => void, onReply?: (message: string) => void, onLike?: (statusId: string) => void, likes?: Record<string, number>, likedIds?: string[] }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [replyMessage, setReplyMessage] = useState('');
   
   useEffect(() => {
     let t: any;
@@ -38,8 +39,8 @@ export function StatusModal({ userName, statuses, onClose }: { userName: string,
   };
   
   return (
-    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
-      <div className="absolute top-0 left-0 right-0 p-4 z-10 bg-gradient-to-b from-black/50 to-transparent">
+    <div className="fixed inset-0 bg-black/90 z-50 flex items-center justify-center p-4">
+      <div className="absolute top-0 left-0 right-0 p-4 z-20 bg-gradient-to-b from-black/70 to-transparent">
         <div className="flex space-x-1 mb-4">
           {statuses.map((s, i) => (
             <div key={i} className="h-1 flex-1 bg-gray-600 rounded-full overflow-hidden">
@@ -74,15 +75,15 @@ export function StatusModal({ userName, statuses, onClose }: { userName: string,
         <ChevronRight className="w-8 h-8" />
       </button>
       
-      <div className="w-full max-w-md aspect-[9/16] bg-gray-800 flex items-center justify-center relative overflow-hidden">
+      <div className="w-full max-w-md aspect-[9/16] bg-[#111B21] rounded-[32px] overflow-hidden shadow-2xl border border-white/10 relative">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentIndex}
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="w-full h-full flex flex-col items-center justify-center p-8 text-center"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.25 }}
+            className="w-full h-full flex flex-col items-center justify-center p-6 text-center relative"
             style={statuses[currentIndex].bgColor ? { backgroundColor: statuses[currentIndex].bgColor } : {}}
           >
             {statuses[currentIndex].type === 'text' ? (
@@ -107,15 +108,62 @@ export function StatusModal({ userName, statuses, onClose }: { userName: string,
         </AnimatePresence>
       </div>
       
-      <div className="absolute bottom-0 left-0 right-0 p-4 z-10 flex justify-center bg-gradient-to-t from-black/50 to-transparent">
+      <div className="absolute bottom-0 left-0 right-0 p-4 z-20 bg-gradient-to-t from-black/70 to-transparent">
         <div className="w-full max-w-md">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            {(() => {
+              const currentStatusId = statuses[currentIndex]?.id;
+              const liked = currentStatusId ? likedIds?.includes(currentStatusId) : false;
+              return (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const statusItem = statuses[currentIndex];
+                    if (statusItem && onLike) {
+                      onLike(statusItem.id || `${currentIndex}`);
+                    }
+                  }}
+                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition ${liked ? 'bg-[#00A884] text-[#071a11]' : 'bg-white/10 text-white hover:bg-white/15'}`}
+                >
+                  <Heart className="w-4 h-4" />
+                  {likes?.[statuses[currentIndex]?.id] ?? 0}
+                </button>
+              );
+            })()}
+            <button
+              type="button"
+              onClick={() => {
+                const input = document.getElementById('statusReplyInput') as HTMLInputElement | null;
+                input?.focus();
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 transition"
+            >
+              <MessageCircle className="w-4 h-4" />
+              Reply
+            </button>
+          </div>
           <div className="relative">
             <input 
+              id="statusReplyInput"
               type="text" 
-              placeholder="Reply..." 
-              className="w-full bg-black/40 text-white border border-white/20 rounded-full py-3 px-6 pl-6 focus:outline-none focus:bg-black/60 focus:border-white/40"
+              placeholder="Reply to status..." 
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              className="w-full bg-white/10 text-white border border-white/10 rounded-full py-3 px-6 focus:outline-none focus:ring-2 focus:ring-[#00A884]"
               onClick={(e) => e.stopPropagation()}
             />
+            <button
+              type="button"
+              onClick={() => {
+                if (replyMessage.trim() && onReply) {
+                  onReply(replyMessage.trim());
+                  setReplyMessage('');
+                }
+              }}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-[#00A884] p-2 text-white hover:bg-[#12b886] transition"
+            >
+              <Send className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </div>

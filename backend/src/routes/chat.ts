@@ -233,8 +233,10 @@ chatRouter.post('/start', async (req, res) => {
     ]);
 
     res.json({ chatId: newChat[0].id });
-  } catch(err) {
-    console.error('START CHAT ERROR:', err); res.status(500).json({ error: 'Failed to start chat', details: err.message });
+  } catch (err: unknown) {
+    const details = err instanceof Error ? err.message : 'Unknown error';
+    console.error('START CHAT ERROR:', err);
+    res.status(500).json({ error: 'Failed to start chat', details });
   }
 });
 

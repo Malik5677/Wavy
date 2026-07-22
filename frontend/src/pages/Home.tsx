@@ -1,10 +1,10 @@
 import { CustomAudioPlayer } from '../components/CustomAudioPlayer';
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { useNavigate } from 'react-router-dom';
 import { logout, updateUser } from '../redux/authSlice';
-import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Smile, Clock, AlertCircle, RefreshCw, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical } from 'lucide-react';
+import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Clock, AlertCircle, RefreshCw, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, FileText, Calendar, Sticker, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
@@ -353,13 +353,24 @@ export default function Home() {
   const [showContactInfo, setShowContactInfo] = useState(false);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showChatsMenu, setShowChatsMenu] = useState(false);
+  const [showPlusMenu, setShowPlusMenu] = useState(false);
+  const [showGifPicker, setShowGifPicker] = useState(false);
+  const [gifSearchQuery, setGifSearchQuery] = useState('');
+  const [gifResults, setGifResults] = useState<any[]>([]);
+  const [gifLoading, setGifLoading] = useState(false);
+  const [gifSearchError, setGifSearchError] = useState<string | null>(null);
   const [showStarredMessages, setShowStarredMessages] = useState(false);
   const [starredMessages, setStarredMessages] = useState<any[]>([]);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [statusLikeCounts, setStatusLikeCounts] = useState<Record<string, number>>({});
+  const [likedStatusIds, setLikedStatusIds] = useState<string[]>([]);
+
   useEffect(() => {
     const handleClick = () => {
       setContextMenu(null);
       setShowChatMenu(false);
       setShowChatsMenu(false);
+      setShowPlusMenu(false);
     };
     window.addEventListener('click', handleClick);
     return () => window.removeEventListener('click', handleClick);
@@ -473,6 +484,46 @@ export default function Home() {
   const [forwardingMessage, setForwardingMessage] = useState<any | null>(null);
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [isChatSearchOpen, setIsChatSearchOpen] = useState(false);
+
+  const filteredMessages = useMemo(() => {
+    const query = chatSearchQuery.trim().toLowerCase();
+    if (!query) return messages;
+
+    return messages.filter((m) => {
+      if (m.type === 'text' && typeof m.content === 'string') {
+        return m.content.toLowerCase().includes(query);
+      }
+      if (m.type === 'image') {
+        return 'photo'.includes(query) || 'image'.includes(query);
+      }
+      if (m.type === 'audio') {
+        return 'audio'.includes(query) || 'voice'.includes(query);
+      }
+      if (m.type === 'file' && typeof m.content === 'string') {
+        return m.content.toLowerCase().includes(query);
+      }
+      if (m.type === 'video') {
+        return 'video'.includes(query);
+      }
+      return false;
+    });
+  }, [messages, chatSearchQuery]);
+
+  const highlightSearchText = (text: string) => {
+    const query = chatSearchQuery.trim();
+    if (!query || !text) return text;
+    const lowerText = text.toLowerCase();
+    const lowerQuery = query.toLowerCase();
+    const index = lowerText.indexOf(lowerQuery);
+    if (index === -1) return text;
+    return (
+      <>
+        {text.slice(0, index)}
+        <span className="bg-[#ffd279] text-[#0B141A] rounded px-1">{text.slice(index, index + query.length)}</span>
+        {text.slice(index + query.length)}
+      </>
+    );
+  };
 
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState(user?.displayName || '');
@@ -812,7 +863,7 @@ export default function Home() {
     }
   };
   
-  const startChat = async (recipientId: string) => {
+  const startChat = async (recipientId: string): Promise<string | null> => {
     try {
       const res = await fetch(`${API_URL}/api/chat/start`, {
         method: 'POST',
@@ -827,17 +878,17 @@ export default function Home() {
         setSearchQuery('');
         setSearchResults([]);
         const updatedChats = await fetchChats();
-      fetchContacts();
+        fetchContacts();
         if (updatedChats) {
-          const openedChat = updatedChats.find((c: any) => c.chatId === data.chatId); console.log("Start chat openedChat:", openedChat);
+          const openedChat = updatedChats.find((c: any) => c.chatId === data.chatId);
           if (openedChat) {
             setActiveChat(openedChat);
           } else {
             setActiveChat({ chatId: data.chatId });
           }
         }
-        // We'll need to fetch full chat info if it's new, but for MVP let's just trigger a full fetch
         fetchChatMessages(data.chatId, updatedChats || undefined);
+        return data.chatId;
       } else {
         const err = await res.text();
         console.error("Failed to start chat", err);
@@ -845,6 +896,7 @@ export default function Home() {
     } catch(err) {
       toast.error('Could not start chat');
     }
+    return null;
   };
 
   const handleGroupAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -859,6 +911,81 @@ export default function Home() {
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const fetchGifResults = async (query: string) => {
+    if (!query.trim()) {
+      setGifResults([]);
+      return;
+    }
+    setGifLoading(true);
+    setGifSearchError(null);
+    try {
+      const apiKey = import.meta.env.VITE_TENOR_API_KEY || 'LIVDSRZULELA';
+      const response = await fetch(`https://g.tenor.com/v1/search?q=${encodeURIComponent(query)}&key=${apiKey}&limit=24&media_filter=minimal`);
+      if (!response.ok) throw new Error('GIF search failed');
+      const data = await response.json();
+      const results = (data.results || []).map((item: any) => ({
+        id: item.id,
+        url: item.media?.[0]?.gif?.url || item.media?.[0]?.mediumgif?.url || item.media?.[0]?.tinygif?.url || item.content
+      })).filter((item: any) => item.url);
+      setGifResults(results);
+    } catch (err: any) {
+      setGifSearchError(err?.message || 'Unable to fetch GIFs');
+      setGifResults([]);
+    } finally {
+      setGifLoading(false);
+    }
+  };
+
+  const sendGifMessage = (gifUrl: string) => {
+    if (!activeChat || !socket) {
+      toast.error('Open a chat to send GIFs');
+      return;
+    }
+    const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const tempMsg = createTempMessage(gifUrl, 'image', tempId, replyingTo?.id);
+    setMessages(prev => [...prev, tempMsg]);
+    socket.emit('send_message', {
+      chatId: activeChat.chatId,
+      content: gifUrl,
+      type: 'image',
+      replyToId: replyingTo?.id,
+      tempId
+    });
+    setShowGifPicker(false);
+    setGifSearchQuery('');
+    setGifResults([]);
+    setShowPlusMenu(false);
+  };
+
+  const toggleStatusLike = (statusId: string) => {
+    setStatusLikeCounts(prev => ({
+      ...prev,
+      [statusId]: (prev[statusId] || 0) + (likedStatusIds.includes(statusId) ? -1 : 1)
+    }));
+    setLikedStatusIds(prev => prev.includes(statusId) ? prev.filter(id => id !== statusId) : [...prev, statusId]);
+  };
+
+  const replyToStatus = async (statusUserId: string, message: string) => {
+    if (!message.trim()) return;
+    if (!socket) return;
+    const chatId = await startChat(statusUserId);
+    if (!chatId) {
+      toast.error('Unable to open chat for reply');
+      return;
+    }
+    const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const tempMsg = createTempMessage(message.trim(), 'text', tempId);
+    setMessages(prev => [...prev, tempMsg]);
+    socket.emit('send_message', {
+      chatId,
+      content: message.trim(),
+      type: 'text',
+      tempId
+    });
+    setIsStatusOpen(false);
+    toast.success('Replied to status');
   };
 
   const createGroup = async () => {
@@ -1284,6 +1411,9 @@ export default function Home() {
           </div>
         </div>
         <div className="mt-auto mb-4 flex flex-col items-center space-y-4">
+          <button onClick={() => setIsDarkMode(prev => !prev)} className={`p-2 rounded-lg cursor-pointer transition-colors ${isDarkMode ? 'bg-[#00A884] text-[#0B141A]' : 'text-[#AEBAC1] hover:bg-[#202C33]'}`} title="Toggle theme">
+            {isDarkMode ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6" />}
+          </button>
           <button onClick={() => setActiveTab('settings')} className={`p-2 rounded-lg cursor-pointer transition-colors ${activeTab === 'settings' ? 'bg-[#202C33] text-[#E9EDEF]' : 'text-[#AEBAC1] hover:bg-[#202C33]'}`} title="Settings">
             <Settings className="w-6 h-6" />
           </button>
@@ -1535,7 +1665,21 @@ export default function Home() {
               <h1 className="text-[19px] font-semibold tracking-tight text-[#E9EDEF]">Calls</h1>
             </header>
             <div className="flex-1 overflow-y-auto min-h-0 p-4">
-               {callHistory.length === 0 ? (
+              {activeCall ? (
+                <div className="mb-4 p-4 rounded-2xl border border-[#2B3B43] bg-[#1D2B33] shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.2em] text-[#7E9CA6]">Active call</p>
+                      <p className="mt-2 text-lg font-semibold text-[#E9EDEF]">
+                        {activeCall.type === 'video' ? 'Video call' : 'Audio call'} with {activeCall.callerId === user?.id ? (activeCall.receiverId || 'Unknown') : (activeCall.callerName || 'Unknown')}
+                      </p>
+                      <p className="mt-1 text-sm text-[#AEBAC1]">{activeCall.status === 'calling' ? 'Calling…' : activeCall.status}</p>
+                    </div>
+                    <button onClick={handleEndCall} className="rounded-full bg-[#EA4335] px-3 py-2 text-sm font-semibold text-white hover:bg-[#f15d5d] transition">End</button>
+                  </div>
+                </div>
+              ) : null}
+              {callHistory.length === 0 ? (
                  <div className="flex-1 h-full flex flex-col items-center justify-center text-center mt-20">
                    <div className="w-20 h-20 bg-[#374045] rounded-full flex items-center justify-center mb-6">
                      <Phone size={32} className="text-[#00A884] opacity-80" />
@@ -1581,45 +1725,58 @@ export default function Home() {
               <h1 className="text-[19px] font-semibold tracking-tight text-[#E9EDEF]">Status</h1>
             </header>
             <div className="flex-1 overflow-y-auto min-h-0 p-4">
-              <div className="mb-6 bg-[#202C33] p-4 rounded-xl flex items-center gap-4 cursor-pointer hover:bg-[#2A3942] transition" onClick={() => setShowCreateStatus(true)}>
-                <div className="relative">
-                  <div className="w-12 h-12 bg-[#374045] rounded-full flex items-center justify-center overflow-hidden">
-                     {user?.profilePhoto ? <img src={user.profilePhoto} className="w-full h-full object-cover" /> : ((user?.displayName || user?.username) ? (user.displayName || user.username)?.[0]?.toUpperCase() || "?" : <UserIcon size={24} className="text-[#AEBAC1]"/>)}
+              <div className="mb-6 rounded-3xl border border-[#26323A] bg-[#202C33] p-4 shadow-sm cursor-pointer hover:border-[#00A884] transition" onClick={() => setShowCreateStatus(true)}>
+                <div className="flex items-center gap-4">
+                  <div className="relative w-16 h-16 rounded-full border-2 border-[#00A884] p-1 bg-[#111B21]">
+                    <div className="w-full h-full rounded-full overflow-hidden bg-[#374045] flex items-center justify-center text-[#AEBAC1] text-lg font-semibold">
+                      {user?.profilePhoto ? <img src={user.profilePhoto} className="w-full h-full object-cover" /> : user.displayName ? user.displayName[0].toUpperCase() : 'M'}
+                    </div>
+                    <div className="absolute -bottom-0.5 -right-0.5 w-6 h-6 rounded-full bg-[#00A884] border-2 border-[#111B21] flex items-center justify-center text-white">
+                      <Plus className="w-3.5 h-3.5" />
+                    </div>
                   </div>
-                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-[#00A884] border-2 border-[#111B21] rounded-full flex items-center justify-center">
-                    <Plus size={10} className="text-white" />
+                  <div>
+                    <h3 className="text-[#E9EDEF] text-base font-semibold">My status</h3>
+                    <p className="text-sm text-[#AEBAC1]">Tap to create a new status update visible for 24 hours.</p>
                   </div>
-                </div>
-                <div>
-                  <h3 className="text-[#E9EDEF] font-medium">My status</h3>
-                  <p className="text-sm text-[#8696A0]">Click to add status update</p>
                 </div>
               </div>
-              
-              <h4 className="text-[#00A884] text-xs font-semibold uppercase tracking-wider mb-4 px-2">Recent updates</h4>
-              
-              <div className="space-y-1">
-                {statuses.length === 0 ? (
-                  <p className="text-[#8696A0] text-sm px-2 italic">No updates right now</p>
-                ) : (
-                  statuses.map(s => {
+
+              <div className="flex items-center justify-between mb-4 px-2">
+                <div>
+                  <h4 className="text-[#E9EDEF] text-sm font-semibold">Recent updates</h4>
+                  <p className="text-xs text-[#6E7A84]">Your contacts' latest status updates</p>
+                </div>
+                <span className="text-xs text-[#00A884]">{statuses.length} {statuses.length === 1 ? 'update' : 'updates'}</span>
+              </div>
+
+              {statuses.length === 0 ? (
+                <div className="rounded-3xl border border-dashed border-[#2B3B43] p-6 text-center text-[#8696A0]">
+                  No status updates yet. Add one to share your moment.
+                </div>
+              ) : (
+                <div className="flex gap-3 overflow-x-auto pb-2">
+                  {statuses.map(s => {
                     const lastStatus = s.statuses[s.statuses.length - 1];
                     if (!lastStatus) return null;
                     return (
-                    <div key={s.user.id} onClick={() => { setIsStatusOpen(true); setActiveStatusUser({ ...s, userName: s.user.id === user?.id ? 'You' : (s.user.displayName || s.user.username || 'Someone') }); }} className="flex items-center gap-4 p-2 hover:bg-[#202C33] rounded-lg cursor-pointer">
-                      <div className="w-12 h-12 rounded-full border-2 border-[#00A884] p-0.5 shrink-0">
-                         <div className="w-full h-full rounded-full bg-[#374045] flex items-center justify-center text-white overflow-hidden">
-                            {lastStatus.type === 'text' ? <span className="text-xs">{lastStatus.content?.substring(0, 10)}</span> : <img src={lastStatus.content} className="w-full h-full object-cover" />}
-                         </div>
-                      </div>
-                      <div>
-                        <h3 className="text-[#E9EDEF] font-medium">{s.user.id === user?.id ? 'You' : (s.user.displayName || s.user.username || 'Someone')}</h3>
-                        <p className="text-sm text-[#8696A0]">{new Date(lastStatus.createdAt).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</p>
-                      </div>
-                    </div>
-                  )})
-                )}
-              </div>
+                      <button key={s.user.id} onClick={() => { setIsStatusOpen(true); setActiveStatusUser({ ...s, userName: s.user.id === user?.id ? 'You' : (s.user.displayName || s.user.username || 'Unknown') }); }} className="min-w-[96px] shrink-0 rounded-3xl bg-[#1C2930] p-3 text-left hover:bg-[#202C33] transition">
+                        <div className="relative mb-3 w-20 h-20 rounded-full border-2 border-[#00A884] overflow-hidden bg-[#374045]">
+                          {lastStatus.type === 'text' ? (
+                            <div className="w-full h-full flex items-center justify-center p-2 text-[11px] text-white text-center">{lastStatus.content?.substring(0, 40)}</div>
+                          ) : (
+                            <img src={lastStatus.content} alt="status preview" className="w-full h-full object-cover" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold text-[#E9EDEF] truncate">{s.user.id === user?.id ? 'You' : (s.user.displayName || s.user.username || 'Unknown')}</p>
+                          <p className="text-[11px] text-[#6E7A84] mt-1">{new Date(lastStatus.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1942,7 +2099,7 @@ export default function Home() {
                         setIsGroupCalling({ isVideo: true, chatName: activeChat.name || 'Group Call', chatId: activeChat.chatId });
                         socket?.emit('ring_group_call', { chatId: activeChat.chatId, isVideo: true });
                       } else if (activeChat?.otherUser) {
-                        setIsCalling({ isVideo: true, name: activeChat.name || 'Unknown', targetUserId: activeChat.otherUser.id, chatId: activeChat.chatId });
+                        handleStartCall('video');
                       } else {
                         toast.error("Can only call direct contacts");
                       }
@@ -1952,7 +2109,7 @@ export default function Home() {
                         setIsGroupCalling({ isVideo: false, chatName: activeChat.name || 'Group Call', chatId: activeChat.chatId });
                         socket?.emit('ring_group_call', { chatId: activeChat.chatId, isVideo: false });
                       } else if (activeChat?.otherUser) {
-                        setIsCalling({ isVideo: false, name: activeChat.name || 'Unknown', targetUserId: activeChat.otherUser.id, chatId: activeChat.chatId });
+                        handleStartCall('audio');
                       } else {
                         toast.error("Can only call direct contacts");
                       }
@@ -1999,6 +2156,19 @@ export default function Home() {
               </div>
             </header>
 
+            {activeCall && activeChat && (activeCall.chatId === activeChat.chatId || activeCall.targetUserId === activeChat.otherUser?.id || activeCall.receiverId === activeChat.otherUser?.id) && (
+              <div className="mx-6 mb-4 p-4 rounded-2xl border border-[#2B3B43] bg-[#1E2E36] shadow-sm flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.2em] text-[#7E9CA6]">Call status</p>
+                  <p className="mt-2 text-base font-semibold text-[#E9EDEF]">
+                    {activeCall.type === 'video' ? 'Video call' : 'Audio call'} {activeCall.callerId === user?.id ? 'to' : 'with'} {activeChat.isGroup ? (activeChat.name || 'This group') : getUserDisplayInfo(activeChat.otherUser).name}
+                  </p>
+                  <p className="mt-1 text-sm text-[#AEBAC1]">{activeCall.status === 'calling' ? 'Calling…' : activeCall.status}</p>
+                </div>
+                <button onClick={handleEndCall} className="rounded-full bg-[#EA4335] px-4 py-2 text-sm font-semibold text-white hover:bg-[#f15d5d] transition">End call</button>
+              </div>
+            )}
+
             {/* Message Area */}
             <div className="flex-1 p-6 overflow-y-auto flex flex-col space-y-4 min-h-0" onScroll={handleScroll}>
               <div className="self-center bg-[#182229] text-[#ffd279] text-[11px] px-3 py-1.5 rounded-lg flex items-center shadow-sm max-w-sm text-center mb-2">
@@ -2008,8 +2178,19 @@ export default function Home() {
               <div className="self-center bg-[#182229] text-[#8696A0] text-xs px-4 py-1.5 rounded-lg uppercase tracking-wider font-medium shadow-sm mb-4">
                 Today
               </div>
+              {chatSearchQuery && (
+                <div className="self-center bg-[#202C33] text-[#AEBAC1] text-xs px-4 py-2 rounded-2xl shadow-sm mb-4 flex items-center gap-2">
+                  <span>{filteredMessages.length} match{filteredMessages.length === 1 ? '' : 'es'} for</span>
+                  <span className="font-semibold text-[#E9EDEF]">"{chatSearchQuery}"</span>
+                </div>
+              )}
+              {filteredMessages.length === 0 && chatSearchQuery ? (
+                <div className="self-center text-[#8696A0] text-sm px-4 py-6 rounded-2xl bg-[#172126] mb-4 text-center w-full max-w-2xl">
+                  No messages matched your search in this chat. Try a different keyword or emoji.
+                </div>
+              ) : null}
 
-              {messages.filter(m => !chatSearchQuery || (m.type === 'text' && m.content?.toLowerCase().includes(chatSearchQuery.toLowerCase()))).map((msg, idx) => {
+              {filteredMessages.map((msg, idx) => {
                 const isMe = msg.senderId === user.id;
                 const repliedMsg = msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null;
                 return (
@@ -2037,7 +2218,19 @@ export default function Home() {
                         {getUserDisplayInfo({ id: msg.senderId, displayName: msg.senderName, phoneNumber: msg.senderPhone }).name?.[0]?.toUpperCase() || "?" || 'U'}
                       </div>
                     )}
-                    
+                    {hoveredMessageId === msg.id && !isSelectingMessages && !msg.isDeleted && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setReactingToMessageId(msg.id);
+                        }}
+                        className="absolute top-0 right-0 z-10 -translate-y-1/2 translate-x-1/2 rounded-full bg-[#0B141A] border border-[#00A884] p-1 text-[#AEBAC1] shadow-lg hover:bg-[#0f1c21]"
+                        title="React to this message"
+                      >
+                        <Smile size={14} />
+                      </button>
+                    )}
 
                     <div className={`${isMe ? 'bg-[#00A884] text-[#E9EDEF] rounded-br-none shadow-md' : 'bg-[#202c33] text-[#e9edef] rounded-bl-none shadow-sm'} px-4 py-2 rounded-2xl relative`}>
                       {msg.isStarred && (
@@ -2085,9 +2278,39 @@ export default function Home() {
                               </a>
                             </div>
                           ) : (
-                            <p className="text-sm">{msg.content}</p>
+                            <p className="text-sm">{typeof msg.content === 'string' ? highlightSearchText(msg.content) : msg.content}</p>
                           )}
-                                <div className={`flex justify-end items-center mt-1 space-x-1`}>
+                          {reactingToMessageId === msg.id && (
+                            <div className="mt-3 rounded-2xl bg-[#172126] border border-[#2B3B43] p-2 flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => (
+                                  <button
+                                    key={emoji}
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleReact(msg.id, emoji);
+                                      setReactingToMessageId(null);
+                                    }}
+                                    className="h-8 w-8 rounded-full bg-[#202c33] hover:bg-[#28343d] transition flex items-center justify-center text-lg"
+                                  >
+                                    {emoji}
+                                  </button>
+                                ))}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setReactingToMessageId(null);
+                                }}
+                                className="text-xs text-[#AEBAC1] hover:text-[#E9EDEF]"
+                              >
+                                Close
+                              </button>
+                            </div>
+                          )}
+                          <div className={`flex justify-end items-center mt-1 space-x-1`}>
                             <span className={`text-[10px] ${isMe ? 'text-white/80' : 'text-[#AEBAC1]'}`}>
                               {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
@@ -2122,8 +2345,9 @@ export default function Home() {
                       
                       {/* Reaction */}
                       {msg.reaction && (
-                        <div className={`absolute -bottom-3 ${isMe ? 'right-2' : 'left-2'} bg-[#202c33] shadow-sm rounded-full px-1.5 py-0.5 text-xs border border-[#222E35]`}>
-                          {msg.reaction}
+                        <div className={`absolute -bottom-3 ${isMe ? 'right-2' : 'left-2'} bg-[#202c33] shadow-sm rounded-full px-2 py-1 text-[11px] border border-[#222E35] flex items-center gap-1`}>
+                          <span>{msg.reaction}</span>
+                          <span className="text-[#8696A0]">Reacted</span>
                         </div>
                       )}
                     </div>
@@ -2201,29 +2425,67 @@ export default function Home() {
                   }} />
                 </div>
               )}
-              <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors">
-                <Smile className="w-6 h-6" />
+              {showPlusMenu && (
+                <div className="absolute bottom-full left-0 mb-2 z-50 w-[300px] rounded-3xl bg-[#122027] border border-[#20303b] shadow-2xl p-3 space-y-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-semibold text-[#E9EDEF]">Quick actions</span>
+                    <button type="button" onClick={() => setShowPlusMenu(false)} className="text-[#8696A0] hover:text-[#E9EDEF]">Close</button>
+                  </div>
+                  <button type="button" onClick={() => { setShowGifPicker(true); setShowPlusMenu(false); }} className="w-full text-left px-3 py-2 rounded-2xl hover:bg-[#1f323a] transition flex items-center gap-3 text-[#E9EDEF]">
+                    <Image className="w-5 h-5" />
+                    GIFs
+                  </button>
+                  <button type="button" onClick={() => fileInputRef.current?.click()} className="w-full text-left px-3 py-2 rounded-2xl hover:bg-[#1f323a] transition flex items-center gap-3 text-[#E9EDEF]">
+                    <Paperclip className="w-5 h-5" />
+                    Photos & files
+                  </button>
+                  <button type="button" onClick={() => cameraInputRef.current?.click()} className="w-full text-left px-3 py-2 rounded-2xl hover:bg-[#1f323a] transition flex items-center gap-3 text-[#E9EDEF]">
+                    <Camera className="w-5 h-5" />
+                    Camera
+                  </button>
+                </div>
+              )}
+              {showGifPicker && (
+                <div className="absolute bottom-full left-0 mb-2 z-50 w-[380px] rounded-3xl bg-[#122027] border border-[#20303b] shadow-2xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <input
+                      type="text"
+                      value={gifSearchQuery}
+                      onChange={(e) => { setGifSearchQuery(e.target.value); fetchGifResults(e.target.value); }}
+                      placeholder="Search GIFs"
+                      className="w-full bg-[#0B141A] border border-[#20303b] rounded-full px-4 py-2 text-sm text-[#E9EDEF] focus:outline-none"
+                    />
+                    <button onClick={() => setShowGifPicker(false)} className="text-[#AEBAC1] hover:text-[#E9EDEF]">Close</button>
+                  </div>
+                  {gifLoading ? (
+                    <div className="text-sm text-[#AEBAC1]">Searching GIFs…</div>
+                  ) : gifSearchError ? (
+                    <div className="text-sm text-red-400">{gifSearchError}</div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto pr-1">
+                      {gifResults.map(gif => (
+                        <button key={gif.id} onClick={() => sendGifMessage(gif.url)} className="rounded-2xl overflow-hidden bg-[#0B141A] hover:opacity-90 transition">
+                          <img src={gif.url} alt="GIF" className="w-full h-full object-cover" />
+                        </button>
+                      ))}
+                      {gifResults.length === 0 && (
+                        <div className="col-span-3 text-sm text-[#8696A0] text-center py-6">Search for GIFs to send</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+              <button type="button" onClick={() => setShowPlusMenu(!showPlusMenu)} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors p-2 rounded-full hover:bg-[#0f1c21]">
+                <Plus className="w-5 h-5" />
               </button>
-              <button type="button" onClick={() => {
-                if (socket && activeChat && user) {
-                  const randomGif = `https://media.giphy.com/media/3o7aD2saalEvp4yZsA/giphy.gif`; // simple dummy for MVP
-                  const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-                  const tempMsg = createTempMessage(randomGif, 'image', tempId);
-                  setMessages(prev => [...prev, tempMsg]);
-                  socket.emit("send_message", {
-                    chatId: activeChat.chatId,
-                    content: randomGif,
-                    type: 'image',
-                    tempId
-                  });
-                }
-              }} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors font-bold text-[10px] bg-[#374045] rounded px-1.5 py-0.5">
-                GIF
+              <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors p-2 rounded-full hover:bg-[#0f1c21]">
+                <FaceSmile className="w-6 h-6" />
               </button>
-              <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors">
+              <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors p-2 rounded-full hover:bg-[#0f1c21]">
                 <Paperclip className="w-6 h-6" />
               </button>
-              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden text-[#E9EDEF] placeholder-[#8696A0]" />
+              <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+              <input type="file" ref={cameraInputRef} accept="image/*" capture="environment" className="hidden" />
               {/* Reply Preview */}
               {replyingTo && (
                 <div className="bg-[#202C33] border-t border-[#222E35] p-3 flex items-start justify-between">
@@ -2468,10 +2730,16 @@ export default function Home() {
         <StatusModal 
           userName={activeStatusUser.user.displayName || activeStatusUser.user.username}
           statuses={activeStatusUser.statuses.map((s: any) => ({
+            id: s.id,
             type: s.type,
             content: s.content,
+            createdAt: s.createdAt,
             bgColor: '#2563eb' // default fallback if needed
           }))}
+          likes={statusLikeCounts}
+          likedIds={likedStatusIds}
+          onLike={toggleStatusLike}
+          onReply={(message) => replyToStatus(activeStatusUser.user.id, message)}
           onClose={() => { setIsStatusOpen(false); setActiveStatusUser(null); }}
         />
       )}
@@ -2501,19 +2769,30 @@ export default function Home() {
                   className="w-full h-32 p-4 text-lg border border-[#222E35] rounded-xl focus:ring-2 focus:ring-[#00A884] focus:outline-none resize-none shrink-0"
                 />
               ) : (
-                 <div className="border-2 border-dashed border-[#222E35] rounded-xl p-8 flex flex-col items-center justify-center cursor-pointer hover:bg-[#202C33] min-h-[200px]" onClick={() => statusFileInputRef.current?.click()}>
-                    {statusMediaPreview ? (
+                 <div className="cursor-pointer">
+                   <div className="w-full rounded-3xl overflow-hidden border border-[#2B3B43] bg-[#111B21] mb-3 min-h-[260px] flex items-center justify-center">
+                     {statusMediaPreview ? (
                        statusType === 'image' ? (
-                          <img src={statusMediaPreview} className="max-h-48 object-contain" />
+                         <img src={statusMediaPreview} className="w-full h-full object-contain" />
                        ) : (
-                          <video src={statusMediaPreview} className="max-h-48 object-contain" controls />
+                         <video src={statusMediaPreview} className="w-full h-full object-contain" controls />
                        )
-                    ) : (
-                      <>
-                        <Image className="w-10 h-10 text-[#AEBAC1] mb-2" />
-                        <span className="text-sm text-[#8696a0]">Click to select {statusType}</span>
-                      </>
-                    )}
+                     ) : (
+                       <div className="flex flex-col items-center justify-center text-center px-6 py-10">
+                         <Image className="w-12 h-12 text-[#AEBAC1] mb-3" />
+                         <p className="text-sm text-[#AEBAC1] mb-1">Tap to add {statusType}</p>
+                         <p className="text-xs text-[#6E7A84]">Preview will appear here before you post.</p>
+                       </div>
+                     )}
+                   </div>
+                   <div className="text-sm text-[#8696a0]">Tap to select {statusType} from your device</div>
+                   <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#1E2E36] px-3 py-2 text-[#AEBAC1] text-xs">
+                     <Cloud size={14} /> Media will be shared with your contacts for 24 hours.
+                   </div>
+                   <div className="mt-4 flex items-center justify-between rounded-2xl bg-[#202C33] p-3 text-sm text-[#AEBAC1]">
+                     <span>Preview</span>
+                     <span className="text-[#00A884]">{statusMediaPreview ? 'Ready to post' : 'No media selected'}</span>
+                   </div>
                  </div>
               )}
               <input type="file" className="hidden text-[#E9EDEF] placeholder-[#8696A0]" ref={statusFileInputRef} accept={statusType === 'image' ? 'image/*' : 'video/*'} onChange={handleStatusMediaSelect} />
@@ -2756,7 +3035,7 @@ export default function Home() {
           <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content || ''); setContextMenu(null); }}>
              <Copy size={18} className="text-[#8696A0]" /> <span>Copy</span>
           </button>
-          <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setContextMenu(null); }}>
+          <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setReactingToMessageId(contextMenu.msg.id); setContextMenu(null); }}>
              <SmilePlus size={18} className="text-[#8696A0]" /> <span>React</span>
           </button>
           <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setForwardingMessage(contextMenu.msg); setContextMenu(null); }}>
