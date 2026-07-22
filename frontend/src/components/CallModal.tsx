@@ -98,29 +98,32 @@ pc.onsignalingstatechange = () => {
 
       stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-     pc.ontrack = (event) => {
+      pc.onicecandidate = (event) => {
+        if (event.candidate) {
+          console.log("📡 Sending ICE Candidate");
+
+          socket.emit("ice_candidate", {
+            toUserId: targetUserId,
+            candidate: event.candidate,
+          });
+        } else {
+          console.log("✅ ICE Gathering Finished");
+        }
+      };
+
+      pc.ontrack = (event) => {
         console.log("🎥 Remote Track Received");
         console.log(event);
 
         if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = event.streams[0];
+          remoteVideoRef.current.muted = false;
+          remoteVideoRef.current.volume = 1;
           remoteVideoRef.current.play().catch(() => {
             console.warn('[WebRTC] Remote autoplay blocked');
           });
         }
       };
-      pc.onicecandidate = (event) => {
-  if (event.candidate) {
-    console.log("📡 Sending ICE Candidate");
-
-    socket.emit("ice_candidate", {
-      toUserId: targetUserId,
-      candidate: event.candidate,
-    });
-  } else {
-    console.log("✅ ICE Gathering Finished");
-  }
-};
 
       if (!isIncoming) {
         // We are calling

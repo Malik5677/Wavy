@@ -390,6 +390,8 @@ function VideoPlayer({ stream }: { stream: MediaStream }) {
   useEffect(() => {
     if (ref.current && stream) {
       ref.current.srcObject = stream;
+      ref.current.muted = false;
+      ref.current.volume = 1;
       ref.current.play().catch(() => {
         console.warn('[WebRTC] Remote group video autoplay blocked');
       });

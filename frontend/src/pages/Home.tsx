@@ -2479,7 +2479,7 @@ export default function Home() {
                 <Plus className="w-5 h-5" />
               </button>
               <button type="button" onClick={() => setShowEmojiPicker(!showEmojiPicker)} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors p-2 rounded-full hover:bg-[#0f1c21]">
-                <FaceSmile className="w-6 h-6" />
+                <SmilePlus className="w-6 h-6" />
               </button>
               <button type="button" onClick={() => fileInputRef.current?.click()} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors p-2 rounded-full hover:bg-[#0f1c21]">
                 <Paperclip className="w-6 h-6" />

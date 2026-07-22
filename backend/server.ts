@@ -456,14 +456,6 @@ console.log("Rooms:", io.sockets.adapter.rooms.get(`chat_${chatId}`));
       });
     });
 
-    socket.on("group_call_answer", (data) => {
-      io.to(data.toUserId).emit("group_call_answer", { fromUserId: userId, answer: data.answer });
-    });
-
-    socket.on("group_ice_candidate", (data) => {
-      io.to(data.toUserId).emit("group_ice_candidate", { fromUserId: userId, candidate: data.candidate });
-    });
-
 
 
     socket.on("disconnect", async () => {
