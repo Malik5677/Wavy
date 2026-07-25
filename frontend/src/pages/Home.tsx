@@ -4,7 +4,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
 import { useNavigate } from 'react-router-dom';
 import { logout, updateUser } from '../redux/authSlice';
-import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Clock, AlertCircle, RefreshCw, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, FileText, Calendar, Sticker, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical } from 'lucide-react';
+import { LogOut, User as UserIcon, Send, Phone, Video, Info, MessageCircle, MessageSquarePlus, PhoneCall, PhoneIncoming, PhoneOutgoing, CircleDashed, Users, Paperclip, Clock, AlertCircle, RefreshCw, Check, CheckCheck, Settings, Edit3, Reply, Pin, Archive, SmilePlus, Forward, Trash2, Bell, Image, Cloud, ChevronRight, Palette, Database, X, Camera, Plus, FileText, Calendar, Sticker, CheckSquare, Square, Moon, Sun, Lock, Mic, ArrowLeft, StopCircle, Key, Shield, Smartphone, Globe, HelpCircle, HardDrive , Copy, Star, MoreVertical, Smile } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { io, Socket } from 'socket.io-client';
 import toast from 'react-hot-toast';
@@ -355,6 +355,11 @@ export default function Home() {
   const [showChatsMenu, setShowChatsMenu] = useState(false);
   const [showPlusMenu, setShowPlusMenu] = useState(false);
   const [showGifPicker, setShowGifPicker] = useState(false);
+  const [showMediaPreview, setShowMediaPreview] = useState(false);
+  const [previewMedia, setPreviewMedia] = useState<{ url: string; type: string; name?: string } | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
   const [gifSearchQuery, setGifSearchQuery] = useState('');
   const [gifResults, setGifResults] = useState<any[]>([]);
   const [gifLoading, setGifLoading] = useState(false);
@@ -485,6 +490,26 @@ export default function Home() {
   const [chatSearchQuery, setChatSearchQuery] = useState('');
   const [isChatSearchOpen, setIsChatSearchOpen] = useState(false);
 
+  const resolveReplyTarget = (message: any, visited = new Set<string>()): any => {
+    if (!message?.replyToId) return null;
+    if (visited.has(message.replyToId)) return null;
+    visited.add(message.replyToId);
+
+    const parent = messages.find((item) => item.id === message.replyToId);
+    if (!parent) return null;
+    return parent.replyToId ? resolveReplyTarget(parent, visited) : parent;
+  };
+
+  const getReplyDepth = (message: any, visited = new Set<string>()): number => {
+    if (!message?.replyToId) return 0;
+    if (visited.has(message.replyToId)) return 1;
+    visited.add(message.replyToId);
+
+    const parent = messages.find((item) => item.id === message.replyToId);
+    if (!parent) return 1;
+    return 1 + getReplyDepth(parent, visited);
+  };
+
   const filteredMessages = useMemo(() => {
     const query = chatSearchQuery.trim().toLowerCase();
     if (!query) return messages;
@@ -508,6 +533,70 @@ export default function Home() {
       return false;
     });
   }, [messages, chatSearchQuery]);
+
+  const handleMessageCopy = async (msg: any) => {
+    if (!msg) return;
+    const value = typeof msg.content === 'string' ? msg.content : '';
+    try {
+      await navigator.clipboard.writeText(value);
+      toast.success('Message copied');
+    } catch {
+      toast.error('Could not copy message');
+    }
+  };
+
+  const handleMessageEdit = (msg: any) => {
+    if (!msg || msg.isDeleted || msg.senderId !== user?.id) return;
+    setEditingMessageId(msg.id);
+    setNewMessage(typeof msg.content === 'string' ? msg.content : '');
+    setReplyingTo(null);
+    setContextMenu(null);
+  };
+
+  const handleMessageDelete = (msg: any) => {
+    if (!msg || msg.senderId !== user?.id || !socket || !activeChat) return;
+    socket.emit('delete_message', { messageId: msg.id, chatId: activeChat.chatId });
+    setContextMenu(null);
+    toast.success('Message deleted');
+  };
+
+  const toggleMessageSelection = (messageId: string) => {
+    setSelectedMessages(prev => prev.includes(messageId) ? prev.filter(id => id !== messageId) : [...prev, messageId]);
+  };
+
+  const handleDeleteSelectedMessages = () => {
+    if (!selectedMessages.length || !socket || !activeChat) return;
+    const selected = messages.filter((msg) => selectedMessages.includes(msg.id));
+    selected.forEach((msg) => {
+      if (msg.senderId === user?.id) {
+        socket.emit('delete_message', { messageId: msg.id, chatId: activeChat.chatId });
+      }
+    });
+    setSelectedMessages([]);
+    setIsSelectingMessages(false);
+    toast.success('Selected messages deleted');
+  };
+
+  const handleStarSelectedMessages = async () => {
+    if (!selectedMessages.length || !token) return;
+    const selected = messages.filter((msg) => selectedMessages.includes(msg.id));
+
+    try {
+      await Promise.all(selected.map((msg) => {
+        const method = msg.isStarred ? 'DELETE' : 'PUT';
+        return fetch(`${API_URL}/api/chat/${msg.chatId || activeChat?.chatId}/messages/${msg.id}/star`, {
+          method,
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }));
+      setSelectedMessages([]);
+      setIsSelectingMessages(false);
+      toast.success('Selected messages updated');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to update selected messages');
+    }
+  };
 
   const highlightSearchText = (text: string) => {
     const query = chatSearchQuery.trim();
@@ -1203,42 +1292,85 @@ export default function Home() {
     }
   };
 
+  const uploadMediaFile = async (file: File) => {
+    if (!activeChat || !socket || !user) return;
+    if (file.size > 15 * 1024 * 1024) {
+      toast.error('File too large (max 15MB)');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    setIsUploadingMedia(true);
+    setUploadProgress(0);
+
+    try {
+      const res = await fetch(`${API_URL}/api/chat/upload`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error('Upload failed');
+      }
+
+      const data = await res.json();
+      setUploadProgress(100);
+      const mediaType = file.type.startsWith('image/') ? 'image' : file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'file';
+      const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const tempMsg = createTempMessage(mediaType === 'file' ? JSON.stringify({ name: file.name, url: data.url }) : data.url, mediaType, tempId, replyingTo?.id);
+      setMessages(prev => [...prev, tempMsg]);
+      socket.emit('send_message', {
+        chatId: activeChat.chatId,
+        content: mediaType === 'file' ? JSON.stringify({ name: file.name, url: data.url }) : data.url,
+        type: mediaType,
+        replyToId: replyingTo?.id,
+        tempId,
+      });
+      setReplyingTo(null);
+      toast.success('Attachment sent');
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to upload attachment');
+    } finally {
+      setIsUploadingMedia(false);
+      setUploadProgress(0);
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file && activeChat) {
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error('File too large (max 10MB)');
-        return;
-      }
-      const reader = new FileReader();
-      reader.onload = (ev) => {
-        const base64 = ev.target?.result as string;
-        if (socket && base64) {
-          let type = 'file';
-          if (file.type.startsWith('image/')) type = 'image';
-          else if (file.type.startsWith('video/')) type = 'video';
-          else if (file.type.startsWith('audio/')) type = 'audio';
-
-          let content = base64;
-          if (type === 'file') {
-            content = JSON.stringify({ name: file.name, data: base64 });
-          }
-
-          const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-          const tempMsg = createTempMessage(content, type, tempId, replyingTo?.id);
-          setMessages(prev => [...prev, tempMsg]);
-          socket.emit("send_message", {
-            chatId: activeChat.chatId,
-            content: content,
-            type: type,
-            replyToId: replyingTo?.id,
-            tempId
-          });
-        }
-      };
-      reader.readAsDataURL(file);
+    if (file) {
+      uploadMediaFile(file);
     }
     e.target.value = '';
+  };
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(true);
+  };
+
+  const handleDragLeave = () => {
+    setDragActive(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      await uploadMediaFile(file);
+    }
+  };
+
+  const handlePaste = async (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const file = Array.from(e.clipboardData.files || [])[0];
+    if (file) {
+      e.preventDefault();
+      await uploadMediaFile(file);
+    }
   };
   
   const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1343,24 +1475,25 @@ export default function Home() {
     });
   };
 
-  const sendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newMessage.trim() || !activeChat || !socket || !user) return;
+  const sendMessage = (e?: React.FormEvent | KeyboardEvent) => {
+    e?.preventDefault();
+    const content = newMessage.trim();
+    if (!content || !activeChat || !socket || !user) return;
 
     if (editingMessageId) {
       socket.emit("edit_message", {
         messageId: editingMessageId,
         chatId: activeChat.chatId,
-        content: newMessage
+        content
       });
       setEditingMessageId(null);
     } else {
       const tempId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const tempMsg = createTempMessage(newMessage, 'text', tempId, replyingTo?.id);
+      const tempMsg = createTempMessage(content, 'text', tempId, replyingTo?.id);
       setMessages(prev => [...prev, tempMsg]);
       socket.emit("send_message", {
         chatId: activeChat.chatId,
-        content: newMessage,
+        content,
         type: 'text',
         replyToId: replyingTo?.id,
         tempId
@@ -1372,6 +1505,27 @@ export default function Home() {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     socket.emit('stop_typing', { chatId: activeChat.chatId });
   };
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+        event.preventDefault();
+        sendMessage(event);
+      }
+
+      if (event.key === 'Escape') {
+        setContextMenu(null);
+        setIsSelectingMessages(false);
+        setSelectedMessages([]);
+        setEditingMessageId(null);
+        setReactingToMessageId(null);
+        setReplyingTo(null);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeChat, newMessage, socket, user, editingMessageId]);
   
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -2193,13 +2347,21 @@ export default function Home() {
               {filteredMessages.map((msg, idx) => {
                 const isMe = msg.senderId === user.id;
                 const repliedMsg = msg.replyToId ? messages.find(m => m.id === msg.replyToId) : null;
+                const replyDepth = getReplyDepth(msg);
+                const replyChainRoot = resolveReplyTarget(msg);
                 return (
                   <motion.div 
                     onClick={() => {
                       if (isSelectingMessages) {
-                        setSelectedMessages(prev => prev.includes(msg.id) ? prev.filter(id => id !== msg.id) : [...prev, msg.id]);
+                        toggleMessageSelection(msg.id);
                       }
                     }}
+                    onDoubleClick={() => {
+                      if (!isMe || msg.isDeleted) return;
+                      handleMessageEdit(msg);
+                    }}
+                    onMouseEnter={() => setHoveredMessageId(msg.id)}
+                    onMouseLeave={() => setHoveredMessageId(null)}
                     key={msg.id || idx} 
                     className={`flex items-end max-w-[70%] relative group ${isMe ? 'self-end' : ''} ${isSelectingMessages ? 'cursor-pointer hover:opacity-80' : ''}`}
                     onContextMenu={(e) => {
@@ -2213,23 +2375,48 @@ export default function Home() {
                       if (info.offset.x > 50) setReplyingTo(msg);
                     }}
                   >
+                    {isSelectingMessages && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleMessageSelection(msg.id);
+                        }}
+                        className="mr-2 shrink-0 rounded-full border border-[#374045] p-1 text-[#AEBAC1]"
+                      >
+                        {selectedMessages.includes(msg.id) ? <CheckSquare size={16} className="text-[#00A884]" /> : <Square size={16} />}
+                      </button>
+                    )}
                     {!isMe && (
                       <div className="w-8 h-8 rounded-full bg-orange-100 flex items-center justify-center text-[10px] font-bold text-orange-700 mr-2 shrink-0">
                         {getUserDisplayInfo({ id: msg.senderId, displayName: msg.senderName, phoneNumber: msg.senderPhone }).name?.[0]?.toUpperCase() || "?" || 'U'}
                       </div>
                     )}
                     {hoveredMessageId === msg.id && !isSelectingMessages && !msg.isDeleted && (
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setReactingToMessageId(msg.id);
-                        }}
-                        className="absolute top-0 right-0 z-10 -translate-y-1/2 translate-x-1/2 rounded-full bg-[#0B141A] border border-[#00A884] p-1 text-[#AEBAC1] shadow-lg hover:bg-[#0f1c21]"
-                        title="React to this message"
-                      >
-                        <Smile size={14} />
-                      </button>
+                      <div className="absolute top-0 right-2 z-10 -translate-y-1/2 flex items-center gap-1 rounded-full bg-[#202C33] border border-[#374045] p-1 shadow-lg">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReplyingTo(msg);
+                          }}
+                          className="rounded-full p-1 text-[#AEBAC1] hover:bg-[#374045] hover:text-[#E9EDEF]"
+                          title="Reply"
+                        >
+                          <Reply size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setReactingToMessageId(msg.id);
+                          }}
+                          className="rounded-full p-1 text-[#AEBAC1] hover:bg-[#374045] hover:text-[#E9EDEF]"
+                          title="React"
+                        >
+                          <Smile size={14} />
+                        </button>
+                      </div>
                     )}
 
                     <div className={`${isMe ? 'bg-[#00A884] text-[#E9EDEF] rounded-br-none shadow-md' : 'bg-[#202c33] text-[#e9edef] rounded-bl-none shadow-sm'} px-4 py-2 rounded-2xl relative`}>
@@ -2246,9 +2433,13 @@ export default function Home() {
                           {!isMe && <p className="text-[11px] font-bold text-orange-600 mb-0.5">{getUserDisplayInfo({ id: msg.senderId, displayName: msg.senderName, phoneNumber: msg.senderPhone }).name || 'User'}</p>}
                           
                           {repliedMsg && (
-                            <div className={`mb-2 p-2 rounded-lg text-sm border-l-4 ${isMe ? 'bg-black/10 border-white/50' : 'bg-[#2A3942] border-orange-500'}`}>
+                            <div className={`mb-2 rounded-lg border-l-4 p-2 text-sm ${isMe ? 'border-white/50 bg-black/10' : 'border-orange-500 bg-[#2A3942]'}`}>
+                              <div className="mb-1 flex items-center gap-1 text-[10px] uppercase tracking-[0.2em] text-[#AEBAC1]">
+                                <Reply size={10} />
+                                <span>{replyDepth > 1 ? 'Threaded reply' : 'Reply'}</span>
+                              </div>
                               <p className={`font-semibold text-xs ${isMe ? 'text-white' : 'text-orange-600'}`}>{repliedMsg.senderId === user.id ? 'You' : (repliedMsg.sender?.name || 'User')}</p>
-                              <p className="opacity-80 truncate text-xs flex items-center">
+                              <p className="truncate text-xs opacity-80 flex items-center">
                                 {repliedMsg.isDeleted ? (
                                   <><CircleDashed size={12} className="mr-1" /> Deleted message</>
                                 ) : repliedMsg.type === 'image' ? (
@@ -2259,12 +2450,24 @@ export default function Home() {
                                   repliedMsg.content
                                 )}
                               </p>
+                              {replyDepth > 1 && replyChainRoot && (
+                                <p className="mt-1 text-[11px] text-[#AEBAC1]">Continues a thread from earlier messages</p>
+                              )}
                             </div>
                           )}
 
                           {msg.type === 'image' ? (
                             <div className="mt-1 mb-1 max-w-xs sm:max-w-sm rounded-lg overflow-hidden">
-                              <img src={msg.content} alt="Attachment" className="w-full h-auto object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPreviewMedia({ url: msg.content, type: 'image', name: 'Image attachment' });
+                                  setShowMediaPreview(true);
+                                }}
+                                className="block w-full text-left"
+                              >
+                                <img src={msg.content} alt="Attachment" className="w-full h-auto object-cover" />
+                              </button>
                             </div>
                           ) : msg.type === 'audio' ? (
                             <div className="mt-1 mb-1">
@@ -2273,9 +2476,12 @@ export default function Home() {
                           ) : msg.type === 'file' ? (
                             <div className={`mt-1 mb-1 rounded p-3 flex items-center space-x-3 ${isMe ? 'bg-black/10' : 'bg-[#2A3942]'}`}>
                               <Paperclip className="w-6 h-6 opacity-70" />
-                              <a href={msg.content.startsWith('{') ? JSON.parse(msg.content).data : msg.content} download={msg.content.startsWith('{') ? JSON.parse(msg.content).name : 'file'} className="text-sm font-medium hover:underline">
-                                {msg.content.startsWith('{') ? JSON.parse(msg.content).name : 'Download File'}
-                              </a>
+                              <div className="min-w-0">
+                                <a href={msg.content.startsWith('{') ? JSON.parse(msg.content).url : msg.content} download={msg.content.startsWith('{') ? JSON.parse(msg.content).name : 'file'} className="text-sm font-medium hover:underline break-all">
+                                  {msg.content.startsWith('{') ? JSON.parse(msg.content).name : 'Download File'}
+                                </a>
+                                <p className="text-[11px] text-[#AEBAC1]">Tap to download</p>
+                              </div>
                             </div>
                           ) : (
                             <p className="text-sm">{typeof msg.content === 'string' ? highlightSearchText(msg.content) : msg.content}</p>
@@ -2369,6 +2575,19 @@ export default function Home() {
               <div ref={messagesEndRef} />
             </div>
 
+            {selectedMessages.length > 0 && (
+              <div className="bg-[#172126] border-t border-[#222E35] p-3 px-6 flex flex-wrap items-center justify-between gap-3 shrink-0 relative z-10">
+                <div className="text-sm text-[#E9EDEF]">
+                  <span className="font-semibold">{selectedMessages.length}</span> message{selectedMessages.length === 1 ? '' : 's'} selected
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button onClick={handleStarSelectedMessages} className="rounded-full border border-[#374045] px-3 py-1.5 text-sm text-[#E9EDEF] hover:bg-[#202C33]">Star</button>
+                  <button onClick={handleDeleteSelectedMessages} className="rounded-full border border-[#374045] px-3 py-1.5 text-sm text-[#E9EDEF] hover:bg-[#202C33]">Delete</button>
+                  <button onClick={() => { setSelectedMessages([]); setIsSelectingMessages(false); }} className="rounded-full border border-[#374045] px-3 py-1.5 text-sm text-[#AEBAC1] hover:bg-[#202C33]">Cancel</button>
+                </div>
+              </div>
+            )}
+
             {/* Reply Indicator */}
             {replyingTo && (
               <div className="bg-[#202C33] border-t border-[#222E35] p-3 px-6 flex items-center justify-between shrink-0 relative z-10">
@@ -2406,7 +2625,7 @@ export default function Home() {
             )}
 
             {/* Input Bar */}
-            <footer className="bg-[#202c33] p-4 flex items-center space-x-3 border-t border-[#222E35] relative">
+            <footer className="bg-[#202c33] p-4 flex items-center space-x-3 border-t border-[#222E35] relative" onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop}>
               {(() => {
                 if (isBlockedByMe) {
                   return (
@@ -2475,6 +2694,16 @@ export default function Home() {
                   )}
                 </div>
               )}
+              {dragActive && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center rounded-2xl border-2 border-dashed border-[#00A884] bg-[#0B141A]/90 text-sm font-semibold text-[#E9EDEF]">
+                  Drop your file to send it
+                </div>
+              )}
+              {isUploadingMedia && (
+                <div className="absolute inset-x-4 top-2 z-20 rounded-full bg-[#0B141A] px-3 py-2 text-xs text-[#AEBAC1] border border-[#374045]">
+                  Uploading attachment… {uploadProgress}%
+                </div>
+              )}
               <button type="button" onClick={() => setShowPlusMenu(!showPlusMenu)} className="text-[#AEBAC1] hover:text-[#00A884] transition-colors p-2 rounded-full hover:bg-[#0f1c21]">
                 <Plus className="w-5 h-5" />
               </button>
@@ -2530,6 +2759,7 @@ export default function Home() {
                       type="text"
                       value={newMessage}
                       onChange={handleTyping}
+                      onPaste={handlePaste}
                       placeholder="Type a message"
                       className="w-full bg-transparent border-none focus:ring-0 text-sm outline-none text-[#E9EDEF] placeholder-[#8696A0]"
                     />
@@ -3003,6 +3233,31 @@ export default function Home() {
         </div>
       )}
       {/* Context Menu */}
+      {showMediaPreview && previewMedia && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4" onClick={() => setShowMediaPreview(false)}>
+          <div className="relative max-h-[90vh] max-w-4xl overflow-hidden rounded-3xl bg-[#0B141A] p-3" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              onClick={() => setShowMediaPreview(false)}
+              className="absolute right-3 top-3 rounded-full bg-[#202C33] p-2 text-[#E9EDEF]"
+            >
+              <X size={18} />
+            </button>
+            {previewMedia.type.startsWith('image/') || previewMedia.type === 'image' ? (
+              <img src={previewMedia.url} alt={previewMedia.name || 'Preview'} className="max-h-[80vh] max-w-full rounded-2xl object-contain" />
+            ) : previewMedia.type.startsWith('video/') || previewMedia.type === 'video' ? (
+              <video controls src={previewMedia.url} className="max-h-[80vh] max-w-full rounded-2xl" />
+            ) : (
+              <div className="flex min-h-[240px] min-w-[320px] flex-col items-center justify-center gap-3 px-8 py-10 text-center text-[#E9EDEF]">
+                <FileText size={36} />
+                <p className="text-lg font-semibold">{previewMedia.name || 'Attachment'}</p>
+                <a href={previewMedia.url} target="_blank" rel="noreferrer" className="rounded-full bg-[#00A884] px-4 py-2 text-sm font-semibold text-white">Open file</a>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {contextMenu && (
         <div 
           className="fixed z-[999] bg-[#233138] shadow-xl rounded-lg py-2 w-56 text-[#d1d7db] font-medium"
@@ -3032,12 +3287,17 @@ export default function Home() {
           <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); }}>
              <Reply size={18} className="text-[#8696A0]" /> <span>Reply</span>
           </button>
-          <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content || ''); setContextMenu(null); }}>
+          <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { handleMessageCopy(contextMenu.msg); setContextMenu(null); }}>
              <Copy size={18} className="text-[#8696A0]" /> <span>Copy</span>
           </button>
           <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setReactingToMessageId(contextMenu.msg.id); setContextMenu(null); }}>
              <SmilePlus size={18} className="text-[#8696A0]" /> <span>React</span>
           </button>
+          {contextMenu.msg.senderId === user?.id && (
+            <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { handleMessageEdit(contextMenu.msg); setContextMenu(null); }}>
+               <Edit3 size={18} className="text-[#8696A0]" /> <span>Edit</span>
+            </button>
+          )}
           <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px]" onClick={() => { setForwardingMessage(contextMenu.msg); setContextMenu(null); }}>
              <Forward size={18} className="text-[#8696A0]" /> <span>Forward</span>
           </button>
@@ -3049,8 +3309,7 @@ export default function Home() {
           </button>
           {contextMenu.msg.senderId === user?.id && (
             <button className="w-full text-left px-5 py-2.5 hover:bg-[#182229] flex items-center gap-4 transition-colors text-[14px] text-red-500" onClick={() => { 
-                socket?.emit('delete_message', { messageId: contextMenu.msg.id, chatId: activeChat.chatId });
-                setContextMenu(null); 
+                handleMessageDelete(contextMenu.msg);
             }}>
                <Trash2 size={18} className="text-red-500" /> <span>Delete</span>
             </button>

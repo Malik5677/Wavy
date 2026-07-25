@@ -1,8 +1,9 @@
 import dotenv from "dotenv";
 dotenv.config();
-console.log("DATABASE_URL:", process.env.DATABASE_URL);
 import express from "express";
+import fs from "fs";
 import path from "path";
+import net from "net";
 import cors from "cors";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
@@ -23,19 +24,79 @@ import { db } from "./src/db";
 import { blockedUsers, users, messages, chats, chatMembers } from "./src/db/schema";
 import { eq, and } from "drizzle-orm";
 
+async function getAvailablePort(startPort: number, host = "0.0.0.0") {
+  const maxAttempts = 10;
+  for (let port = startPort; port < startPort + maxAttempts; port += 1) {
+    const isFree = await new Promise<boolean>((resolve) => {
+      const tester = net.createServer()
+        .once("error", () => resolve(false))
+        .once("listening", () => {
+          tester.close(() => resolve(true));
+        })
+        .listen(port, host);
+    });
+    if (isFree) return port;
+  }
+  return startPort;
+}
 
 async function startServer() {
-  console.log("DATABASE_URL IS:", process.env.DATABASE_URL);
   const app = express();
   app.set("trust proxy", 1);
+  app.disable("x-powered-by");
+  const host = process.env.HOST || "0.0.0.0";
   const PORT = Number(process.env.PORT || 3000);
+  const HMR_PORT = Number(process.env.HMR_PORT || process.env.VITE_HMR_PORT || 24678);
+  const isProduction = process.env.NODE_ENV === "production";
+
+  const PORT_TO_LISTEN = isProduction ? PORT : await getAvailablePort(PORT, host);
+  const HMR_PORT_TO_USE = isProduction ? HMR_PORT : await getAvailablePort(HMR_PORT, host);
+
+  if (!isProduction && PORT_TO_LISTEN !== PORT) {
+    console.warn(`Port ${PORT} is already in use; starting server on port ${PORT_TO_LISTEN} instead.`);
+  }
+
+  if (!isProduction && HMR_PORT_TO_USE !== HMR_PORT) {
+    console.warn(`HMR port ${HMR_PORT} is already in use; using port ${HMR_PORT_TO_USE} instead.`);
+  }
+
+  const uploadDir = path.join(process.cwd(), process.env.UPLOAD_DIR || "uploads");
+  fs.mkdirSync(uploadDir, { recursive: true });
+
+  const allowedOrigins = [
+    process.env.FRONTEND_URL,
+    process.env.VITE_API_URL,
+    process.env.CORS_ORIGIN,
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000"
+  ].filter(Boolean) as string[];
+
+  const isAllowedOrigin = (origin?: string) => {
+    if (!origin) return true;
+    const normalized = origin.toLowerCase();
+    return allowedOrigins.some((allowed) => normalized === allowed.toLowerCase()) || normalized.endsWith(".vercel.app") || normalized.endsWith(".onrender.com");
+  };
 
   // Basic middleware
-  app.use(cors());
+  app.use(cors({
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+      } else {
+        callback(null, false);
+      }
+    },
+    credentials: true,
+  }));
   app.use(helmet({ contentSecurityPolicy: false })); // Disabled for dev with Vite
   app.use(express.json({ limit: "50mb" }));
   app.use(cookieParser());
-  app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+  app.use('/uploads', express.static(uploadDir));
+
+  app.get('/health', (_req, res) => {
+    res.json({ ok: true, timestamp: new Date().toISOString() });
+  });
 
   // Rate limiting setup
   const apiLimiter = rateLimit({
@@ -139,12 +200,15 @@ async function startServer() {
     }
 
   socket.on("join_chat", async (chatId) => {
-  console.log("JOIN ROOM", socket.data.userId, chatId);
-
-  await socket.join(`chat_${chatId}`);
-
-  console.log(socket.rooms);
-});
+    try {
+      console.log("JOIN ROOM", socket.data.userId, chatId);
+      await socket.join(`chat_${chatId}`);
+      console.log(socket.rooms);
+    } catch (err) {
+      console.error("Failed to join chat room", err);
+      socket.emit("join_chat_error", { error: (err as Error).message });
+    }
+  });
 
     socket.on("send_message", async (data) => {
       const { chatId, content, type, replyToId, tempId } = data;
@@ -572,7 +636,7 @@ app.get('/api/users/blocked', authenticate, async (req: any, res) => {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       root: frontendRoot,
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: { port: HMR_PORT_TO_USE } },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -583,8 +647,16 @@ app.get('/api/users/blocked', authenticate, async (req: any, res) => {
     });
   }
 
-  httpServer.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+  httpServer.on("error", (err) => {
+    if ((err as any)?.code === "EADDRINUSE") {
+      console.error(`Port ${PORT_TO_LISTEN} is already in use. In production this is fatal.`);
+      process.exit(1);
+    }
+    console.error("Server error:", err);
+  });
+
+  httpServer.listen(PORT_TO_LISTEN, host, () => {
+    console.log(`Server running on http://${host === "0.0.0.0" ? "localhost" : host}:${PORT_TO_LISTEN}`);
   });
 }
 

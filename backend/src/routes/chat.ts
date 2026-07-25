@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 import { db } from '../db';
 import { blockedUsers, users, chats, chatMembers, messages, starredMessages } from '../db/schema';
 import { eq, or, and, desc, sql } from 'drizzle-orm';
@@ -8,6 +11,21 @@ import { applyPrivacyFilters } from '../utils/privacy';
 export const chatRouter = Router();
 
 chatRouter.use(authenticate);
+
+const uploadDir = path.join(process.cwd(), process.env.UPLOAD_DIR || 'uploads');
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const ext = path.extname(file.originalname || '') || '';
+      const safeName = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}${ext}`;
+      cb(null, safeName);
+    }
+  }),
+  limits: { fileSize: 15 * 1024 * 1024 },
+});
 
 const isUserChatMember = async (userId: string, chatId: string) => {
   const member = await db.select().from(chatMembers).where(and(eq(chatMembers.chatId, chatId), eq(chatMembers.userId, userId))).limit(1);
@@ -193,6 +211,27 @@ chatRouter.get('/starred', async (req, res) => {
   } catch (err) {
     console.error('Failed to fetch starred messages', err);
     res.status(500).json({ error: 'Failed to fetch starred messages' });
+  }
+});
+
+chatRouter.post('/upload', upload.single('file'), async (req: any, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file provided' });
+    }
+
+    const baseUrl = `${req.protocol}://${req.get('host')}`;
+    const uploadUrl = `${baseUrl}/uploads/${req.file.filename}`;
+
+    res.json({
+      url: uploadUrl,
+      name: req.file.originalname,
+      type: req.file.mimetype,
+      size: req.file.size,
+    });
+  } catch (err) {
+    console.error('Failed to upload file', err);
+    res.status(500).json({ error: 'Failed to upload file' });
   }
 });
 
