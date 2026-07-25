@@ -632,7 +632,7 @@ app.get('/api/users/blocked', authenticate, async (req: any, res) => {
   const frontendRoot = process.env.NODE_ENV !== 'production'
     ? path.join(process.cwd(), '../frontend')
     : path.join(process.cwd(), 'frontend');
-  const distPath = path.join(process.cwd(), 'dist');
+  const distPath = path.join(frontendRoot, 'dist');
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       root: frontendRoot,

@@ -6,12 +6,15 @@ import { Pool } from "pg";
 import * as schema from "./schema";
 
 const databaseUrl = process.env.DATABASE_URL;
-const useSsl = process.env.DB_SSL === "true" || process.env.DB_SSL === "1" || /sslmode=(require|verify-ca|verify-full|true)/.test(databaseUrl || "");
+const dbSslExplicitFalse = process.env.DB_SSL === "false" || process.env.DB_SSL === "0";
+const useSsl = databaseUrl
+  ? !dbSslExplicitFalse
+  : process.env.DB_SSL === "true" || process.env.DB_SSL === "1";
 const poolConfig = databaseUrl
 
   ? {
       connectionString: databaseUrl,
-      ssl: useSsl ? { rejectUnauthorized: false } : undefined,
+      ssl: !dbSslExplicitFalse ? { rejectUnauthorized: false } : undefined,
       max: Number(process.env.PG_MAX_CLIENTS || 10),
       idleTimeoutMillis: Number(process.env.PG_IDLE_TIMEOUT_MS || 60000),
       connectionTimeoutMillis: Number(process.env.PG_CONN_TIMEOUT_MS || 20000),
