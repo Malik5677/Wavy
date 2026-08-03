@@ -1,6 +1,6 @@
 import { configureStore } from "@reduxjs/toolkit";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import authReducer, { hydrate } from "./authSlice";
+import authReducer, { hydrate, User } from "./authSlice";
+import { secureStorage } from "@/lib/storage";
 
 export const store = configureStore({
   reducer: {
@@ -10,10 +10,10 @@ export const store = configureStore({
 
 export async function loadPersistedAuth() {
   try {
-    const token = await AsyncStorage.getItem("token");
-    const userStr = await AsyncStorage.getItem("user");
+    const token = await secureStorage.get("wavy_token");
+    const userStr = await secureStorage.get("wavy_user");
     if (token) {
-      const user = userStr ? JSON.parse(userStr) : null;
+      const user = userStr ? (JSON.parse(userStr) as User | null) : null;
       store.dispatch(hydrate({ user, token }));
     } else {
       store.dispatch(hydrate({ user: null, token: null }));
@@ -24,14 +24,14 @@ export async function loadPersistedAuth() {
   }
 }
 
-export async function persistAuth(token: string | null, user: any | null) {
+export async function persistAuth(token: string | null, user: User | null) {
   try {
     if (token) {
-      await AsyncStorage.setItem("token", token);
-      await AsyncStorage.setItem("user", JSON.stringify(user));
+      await secureStorage.set("wavy_token", token);
+      await secureStorage.set("wavy_user", JSON.stringify(user));
     } else {
-      await AsyncStorage.removeItem("token");
-      await AsyncStorage.removeItem("user");
+      await secureStorage.remove("wavy_token");
+      await secureStorage.remove("wavy_user");
     }
   } catch (e) {
     console.error("Failed to persist auth:", e);

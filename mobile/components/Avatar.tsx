@@ -9,18 +9,10 @@ interface AvatarProps {
   size?: number;
   online?: boolean;
   group?: boolean;
+  verified?: boolean;
 }
 
-export default function Avatar({ name, photo, size = 56, online = false, group = false }: AvatarProps) {
-  const initials = name
-    ? name
-        .split(" ")
-        .map((n) => n[0])
-        .join("")
-        .toUpperCase()
-        .slice(0, 2)
-    : "?";
-
+export default function Avatar({ name, photo, size = 56, online = false, group = false, verified = false }: AvatarProps) {
   const bgColor = group ? Colors.primary : Colors.bgPanel;
 
   return (
@@ -67,6 +59,25 @@ export default function Avatar({ name, photo, size = 56, online = false, group =
             borderColor: Colors.bg,
           }}
         />
+      )}
+      {verified && (
+        <View
+          style={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            width: size * 0.24,
+            height: size * 0.24,
+            borderRadius: (size * 0.24) / 2,
+            backgroundColor: Colors.primary,
+            borderWidth: 2,
+            borderColor: Colors.bg,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <MaterialCommunityIcons name="check" size={size * 0.15} color="#fff" />
+        </View>
       )}
     </View>
   );

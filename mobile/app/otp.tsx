@@ -10,6 +10,7 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import { router, useLocalSearchParams } from "expo-router";
 import { useDispatch } from "react-redux";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -122,6 +123,8 @@ export default function OTPScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
+        <View pointerEvents="none" style={styles.backdropGlowA} />
+        <View pointerEvents="none" style={styles.backdropGlowB} />
         <View style={styles.header}>
           <View style={styles.icon}>
             <MaterialCommunityIcons name="shield-check" size={40} color="#fff" />
@@ -133,77 +136,79 @@ export default function OTPScreen() {
           </Text>
         </View>
 
-        <View style={styles.card}>
-          <View style={styles.inputGroup}>
-            <MaterialCommunityIcons
-              name="account-outline"
-              size={20}
-              color={Colors.textSecondary}
-              style={styles.inputIcon}
-            />
-            <TextInput
-              placeholder="Your name (optional)"
-              placeholderTextColor={Colors.textSecondary}
-              value={displayName}
-              onChangeText={setDisplayName}
-              style={styles.input}
-            />
+        <BlurView intensity={28} tint="dark" style={styles.glowCard}>
+          <View style={styles.card}>
+            <View style={styles.inputGroup}>
+              <MaterialCommunityIcons
+                name="account-outline"
+                size={20}
+                color={Colors.textSecondary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Your name (optional)"
+                placeholderTextColor={Colors.textSecondary}
+                value={displayName}
+                onChangeText={setDisplayName}
+                style={styles.input}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <MaterialCommunityIcons
+                name="lock-outline"
+                size={20}
+                color={Colors.textSecondary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Enter OTP"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="number-pad"
+                value={code}
+                onChangeText={setCode}
+                maxLength={6}
+                style={[styles.input, { textAlign: "center", fontSize: 22, letterSpacing: 8 }]}
+              />
+            </View>
+
+            <Pressable
+              style={[styles.verifyButton, isVerifying && { opacity: 0.7 }]}
+              onPress={handleVerify}
+              disabled={isVerifying}
+            >
+              {isVerifying ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.verifyText}>Verify & Login</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={[styles.secondaryButton, (resendCooldown > 0 || isSending) && { opacity: 0.5 }]}
+              onPress={handleResend}
+              disabled={resendCooldown > 0 || isSending}
+            >
+              {isSending ? (
+                <ActivityIndicator color={Colors.primary} size="small" />
+              ) : (
+                <Text style={styles.secondaryText}>
+                  {resendCooldown > 0
+                    ? `Resend code in ${resendCooldown}s`
+                    : "Resend OTP"}
+                </Text>
+              )}
+            </Pressable>
+
+            <Pressable style={styles.secondaryButton} onPress={handleChangeAccount}>
+              <Text style={styles.secondaryText}>Change email or phone</Text>
+            </Pressable>
+
+            <Text style={styles.note}>
+              Enter the code from your email to complete login.
+            </Text>
           </View>
-
-          <View style={styles.inputGroup}>
-            <MaterialCommunityIcons
-              name="lock-outline"
-              size={20}
-              color={Colors.textSecondary}
-              style={styles.inputIcon}
-            />
-            <TextInput
-              placeholder="Enter OTP"
-              placeholderTextColor={Colors.textSecondary}
-              keyboardType="number-pad"
-              value={code}
-              onChangeText={setCode}
-              maxLength={6}
-              style={[styles.input, { textAlign: "center", fontSize: 22, letterSpacing: 8 }]}
-            />
-          </View>
-
-          <Pressable
-            style={[styles.verifyButton, isVerifying && { opacity: 0.7 }]}
-            onPress={handleVerify}
-            disabled={isVerifying}
-          >
-            {isVerifying ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.verifyText}>Verify & Login</Text>
-            )}
-          </Pressable>
-
-          <Pressable
-            style={[styles.secondaryButton, (resendCooldown > 0 || isSending) && { opacity: 0.5 }]}
-            onPress={handleResend}
-            disabled={resendCooldown > 0 || isSending}
-          >
-            {isSending ? (
-              <ActivityIndicator color={Colors.primary} size="small" />
-            ) : (
-              <Text style={styles.secondaryText}>
-                {resendCooldown > 0
-                  ? `Resend code in ${resendCooldown}s`
-                  : "Resend OTP"}
-              </Text>
-            )}
-          </Pressable>
-
-          <Pressable style={styles.secondaryButton} onPress={handleChangeAccount}>
-            <Text style={styles.secondaryText}>Change email or phone</Text>
-          </Pressable>
-
-          <Text style={styles.note}>
-            Enter the code from your email to complete login.
-          </Text>
-        </View>
+        </BlurView>
       </ScrollView>
       <Toast />
     </KeyboardAvoidingView>
@@ -216,6 +221,25 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     backgroundColor: Colors.bg,
     padding: 20,
+    position: "relative",
+  },
+  backdropGlowA: {
+    position: "absolute",
+    top: 100,
+    left: 20,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(124, 77, 255, 0.16)",
+  },
+  backdropGlowB: {
+    position: "absolute",
+    bottom: 120,
+    right: 30,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(37, 211, 102, 0.12)",
   },
   header: {
     alignItems: "center",
@@ -244,15 +268,23 @@ const styles = StyleSheet.create({
     maxWidth: 300,
     lineHeight: 20,
   },
+  glowCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+  },
   card: {
     width: "100%",
-    maxWidth: 400,
+    maxWidth: 420,
     alignSelf: "center",
-    backgroundColor: Colors.bgPanel,
-    borderRadius: 20,
+    backgroundColor: "rgba(14, 19, 35, 0.76)",
+    borderRadius: 28,
     padding: 24,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(255,255,255,0.16)",
   },
   inputGroup: {
     flexDirection: "row",

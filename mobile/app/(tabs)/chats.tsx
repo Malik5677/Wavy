@@ -8,7 +8,6 @@ import {
   StyleSheet,
   Pressable,
   Modal,
-  ActivityIndicator,
   Platform,
   Animated,
 } from "react-native";
@@ -16,6 +15,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { router } from "expo-router";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Toast from "react-native-toast-message";
 
 import { RootState } from "@/redux/store";
@@ -179,7 +179,9 @@ export default function ChatsScreen() {
         const data = await res.json();
         setSavedContacts(data);
       }
-    } catch (e) {}
+    } catch {
+      // Keep contacts list resilient if the endpoint is unavailable.
+    }
   }, [token]);
 
   const searchUsers = async (q: string) => {
@@ -196,8 +198,8 @@ export default function ChatsScreen() {
         const data = await res.json();
         setSearchResults(data);
       }
-    } catch (err) {
-      console.error("Search error:", err);
+    } catch {
+      Toast.show({ type: "error", text1: "Search failed" });
     }
   };
 
@@ -219,12 +221,13 @@ export default function ChatsScreen() {
           params: { chatId: data.chatId, name: opened?.name || "Chat" },
         });
       }
-    } catch (err) {
+    } catch {
       Toast.show({ type: "error", text1: "Could not start chat" });
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await Haptics.selectionAsync();
     disconnectSocket();
     dispatch(logout());
     router.replace("/login");
@@ -306,12 +309,16 @@ export default function ChatsScreen() {
           size={56}
           group={chat.isGroup}
           online={chat.otherUser?.isOnline}
+          verified={Boolean(chat.otherUser?.isVerified || chat.isVerified)}
         />
         <View style={styles.chatInfo}>
           <View style={styles.chatTopRow}>
             <Text style={styles.chatName} numberOfLines={1}>
               {name}
             </Text>
+            {chat.otherUser?.isVerified || chat.isVerified ? (
+              <MaterialCommunityIcons name="check-decagram" size={14} color={Colors.primary} style={styles.verifiedIcon} />
+            ) : null}
             <View style={styles.chatTopRight}>
               {time ? <Text style={styles.chatTime}>{time}</Text> : null}
               {isPinned ? (
@@ -375,13 +382,42 @@ export default function ChatsScreen() {
       <View style={styles.header}>
         <View style={styles.headerTop}>
           <TouchableOpacity
-            onPress={() => setMenuOpen(!menuOpen)}
+            onPress={async () => {
+              await Haptics.selectionAsync();
+              setMenuOpen(!menuOpen);
+            }}
             style={styles.moreButton}
             accessibilityLabel="More options"
           >
             <MaterialCommunityIcons name="dots-horizontal" size={20} color={Colors.text} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Chats</Text>
+          <TouchableOpacity
+            onPress={async () => {
+              await Haptics.selectionAsync();
+              Toast.show({ type: "info", text1: "Camera shortcut" });
+            }}
+            style={styles.cameraButton}
+            accessibilityLabel="Camera"
+          >
+            <MaterialCommunityIcons name="camera-outline" size={20} color={Colors.text} />
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.searchShell}>
+          <MaterialCommunityIcons name="magnify" size={18} color={Colors.textSecondary} />
+          <TextInput
+            value={searchQuery}
+            onChangeText={searchUsers}
+            placeholder="Search chats or contacts"
+            placeholderTextColor={Colors.textSecondary}
+            style={styles.searchInput}
+          />
+          {searchQuery ? (
+            <TouchableOpacity onPress={() => setSearchQuery("")}> 
+              <MaterialCommunityIcons name="close" size={18} color={Colors.textSecondary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -435,7 +471,7 @@ export default function ChatsScreen() {
             </Pressable>
           )}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>No results found for "{searchQuery}"</Text>
+            <Text style={styles.emptyText}>No results found for &quot;{searchQuery}&quot;</Text>
           }
           contentContainerStyle={{ paddingBottom: 180 }}
         />
@@ -522,6 +558,7 @@ const styles = StyleSheet.create({
   headerTop: {
     flexDirection: "row",
     alignItems: "center",
+    marginBottom: 10,
   },
   moreButton: {
     width: 40,
@@ -532,11 +569,36 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginRight: 10,
   },
+  cameraButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.bgPanel,
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: "auto",
+  },
   headerTitle: {
     fontSize: 34,
     fontWeight: "700",
     color: Colors.text,
     letterSpacing: -0.5,
+  },
+  searchShell: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 12,
+    height: 44,
+    backgroundColor: Colors.bgPanel,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  searchInput: {
+    flex: 1,
+    color: Colors.text,
+    fontSize: 14,
   },
   chatRow: {
     flexDirection: "row",
@@ -558,7 +620,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  chatName: { fontSize: 17, fontWeight: "600", color: Colors.text, flex: 1 },
+  chatName: { fontSize: 17, fontWeight: "600", color: Colors.text, flexShrink: 1 },
+  verifiedIcon: { marginLeft: 4, marginRight: 6 },
   chatTopRight: { flexDirection: "row", alignItems: "center", marginLeft: 8 },
   chatTime: { fontSize: 13, color: Colors.textSecondary },
   pinIcon: { marginLeft: 4 },

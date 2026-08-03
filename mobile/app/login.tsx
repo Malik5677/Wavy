@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { BlurView } from "expo-blur";
 import { router } from "expo-router";
 import { useDispatch } from "react-redux";
 import Toast from "react-native-toast-message";
@@ -104,66 +105,71 @@ export default function LoginScreen() {
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        <View style={styles.card}>
-          <View style={styles.iconContainer}>
-            <MaterialCommunityIcons name="whatsapp" size={42} color="#fff" />
+        <View pointerEvents="none" style={styles.backdropGlowA} />
+        <View pointerEvents="none" style={styles.backdropGlowB} />
+        <BlurView intensity={30} tint="dark" style={styles.glowCard}>
+          <View style={styles.card}>
+            <View style={styles.iconContainer}>
+              <MaterialCommunityIcons name="whatsapp" size={42} color="#fff" />
+            </View>
+
+            <Text style={styles.eyebrow}>Secure sign in</Text>
+            <Text style={styles.title}>WaveChat</Text>
+            <Text style={styles.subtitle}>
+              Login with your phone number and email. An OTP will be sent to your inbox.
+            </Text>
+
+            <View style={styles.inputGroup}>
+              <MaterialCommunityIcons
+                name="phone-outline"
+                size={20}
+                color={Colors.textSecondary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Phone number"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="phone-pad"
+                value={phoneNumber}
+                onChangeText={setPhoneNumber}
+                style={styles.input}
+                maxLength={10}
+              />
+            </View>
+
+            <View style={styles.inputGroup}>
+              <MaterialCommunityIcons
+                name="email-outline"
+                size={20}
+                color={Colors.textSecondary}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                placeholder="Email address"
+                placeholderTextColor={Colors.textSecondary}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                value={email}
+                onChangeText={setEmail}
+                style={styles.input}
+              />
+            </View>
+
+            <Pressable
+              style={[styles.button, loading && { opacity: 0.7 }]}
+              onPress={handleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.buttonText}>Send OTP</Text>
+              )}
+            </Pressable>
+
+            <Text style={styles.footer}>OTP is delivered by email only.</Text>
           </View>
-
-          <Text style={styles.title}>WaveChat</Text>
-          <Text style={styles.subtitle}>
-            Login with your phone number and email. An OTP will be sent to your inbox.
-          </Text>
-
-          <View style={styles.inputGroup}>
-            <MaterialCommunityIcons
-              name="phone-outline"
-              size={20}
-              color={Colors.textSecondary}
-              style={styles.inputIcon}
-            />
-            <TextInput
-              placeholder="Phone number"
-              placeholderTextColor={Colors.textSecondary}
-              keyboardType="phone-pad"
-              value={phoneNumber}
-              onChangeText={setPhoneNumber}
-              style={styles.input}
-              maxLength={10}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <MaterialCommunityIcons
-              name="email-outline"
-              size={20}
-              color={Colors.textSecondary}
-              style={styles.inputIcon}
-            />
-            <TextInput
-              placeholder="Email address"
-              placeholderTextColor={Colors.textSecondary}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              value={email}
-              onChangeText={setEmail}
-              style={styles.input}
-            />
-          </View>
-
-          <Pressable
-            style={[styles.button, loading && { opacity: 0.7 }]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Text style={styles.buttonText}>Send OTP</Text>
-            )}
-          </Pressable>
-
-          <Text style={styles.footer}>OTP is delivered by email only.</Text>
-        </View>
+        </BlurView>
       </ScrollView>
       <Toast />
     </KeyboardAvoidingView>
@@ -177,15 +183,46 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: Colors.bg,
     padding: 24,
+    position: "relative",
+  },
+  backdropGlowA: {
+    position: "absolute",
+    top: 120,
+    left: 20,
+    width: 180,
+    height: 180,
+    borderRadius: 90,
+    backgroundColor: "rgba(124, 77, 255, 0.18)",
+  },
+  backdropGlowB: {
+    position: "absolute",
+    bottom: 120,
+    right: 40,
+    width: 220,
+    height: 220,
+    borderRadius: 110,
+    backgroundColor: "rgba(37, 211, 102, 0.12)",
+  },
+  glowCard: {
+    width: "100%",
+    maxWidth: 420,
+    borderRadius: 28,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.16)",
+    shadowColor: "#000",
+    shadowOpacity: 0.32,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
   },
   card: {
     width: "100%",
-    maxWidth: 400,
-    backgroundColor: Colors.bgPanel,
-    borderRadius: 20,
+    maxWidth: 420,
+    backgroundColor: "rgba(14, 19, 35, 0.74)",
+    borderRadius: 28,
     padding: 32,
     borderWidth: 1,
-    borderColor: Colors.border,
+    borderColor: "rgba(255,255,255,0.16)",
   },
   iconContainer: {
     width: 72,
@@ -197,9 +234,18 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     marginBottom: 20,
   },
+  eyebrow: {
+    textAlign: "center",
+    color: Colors.primarySoft,
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 1,
+    textTransform: "uppercase",
+    marginBottom: 8,
+  },
   title: {
     textAlign: "center",
-    fontSize: 28,
+    fontSize: 30,
     fontWeight: "800",
     color: Colors.text,
     letterSpacing: -0.5,

@@ -11,6 +11,7 @@ import {
 import { useSelector } from "react-redux";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Toast from "react-native-toast-message";
 
 import { RootState } from "@/redux/store";
@@ -49,7 +50,14 @@ export default function CallsScreen() {
     const isOutgoing = !item.isIncoming;
 
     return (
-      <TouchableOpacity style={styles.callRow}>
+      <TouchableOpacity
+        style={styles.callRow}
+        onPress={async () => {
+          await Haptics.selectionAsync();
+          Toast.show({ type: "info", text1: "Call details coming soon" });
+        }}
+        activeOpacity={0.9}
+      >
         <Avatar
           name={item.otherUser?.displayName || item.otherUser?.phoneNumber || "?"}
           photo={item.otherUser?.profilePhoto}
@@ -74,11 +82,13 @@ export default function CallsScreen() {
             </Text>
           </View>
         </View>
-        <MaterialCommunityIcons
-          name={item.type === "video" ? "video" : "phone"}
-          size={22}
-          color={Colors.primary}
-        />
+        <View style={styles.callAction}>
+          <MaterialCommunityIcons
+            name={item.type === "video" ? "video" : "phone"}
+            size={22}
+            color={Colors.primary}
+          />
+        </View>
       </TouchableOpacity>
     );
   };
@@ -130,11 +140,29 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingHorizontal: 16,
     paddingVertical: 12,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    backgroundColor: Colors.bgPanel,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.14,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
   },
   callInfo: { flex: 1, marginLeft: 12 },
   callName: { fontSize: 17, fontWeight: "600", color: Colors.text },
   callMeta: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   callTime: { fontSize: 13, color: Colors.textSecondary },
+  callAction: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "rgba(124, 77, 255, 0.16)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
   emptyContainer: { alignItems: "center", marginTop: 80, paddingHorizontal: 40 },
   emptyIcon: {
     width: 72,

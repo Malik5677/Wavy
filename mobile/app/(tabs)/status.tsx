@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   View,
   Text,
@@ -8,7 +8,6 @@ import {
   Image,
   Modal,
   TextInput,
-  Pressable,
   ScrollView,
   ActivityIndicator,
   Platform,
@@ -16,6 +15,7 @@ import {
 import { useSelector } from "react-redux";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import Toast from "react-native-toast-message";
 
 import { RootState } from "@/redux/store";
@@ -32,7 +32,7 @@ export default function StatusScreen() {
   const [statusType, setStatusType] = useState("text");
   const [viewingStatus, setViewingStatus] = useState<any>(null);
 
-  const fetchStatuses = async () => {
+  const fetchStatuses = useCallback(async () => {
     if (!token) return;
     try {
       const res = await fetch(`${API_URL}/api/status`, {
@@ -47,17 +47,18 @@ export default function StatusScreen() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token]);
 
   useEffect(() => {
     fetchStatuses();
-  }, [token]);
+  }, [fetchStatuses]);
 
   const handleCreateStatus = async () => {
     if (!newStatusText.trim()) {
       Toast.show({ type: "error", text1: "Content is required" });
       return;
     }
+    await Haptics.selectionAsync();
     try {
       const res = await fetch(`${API_URL}/api/status`, {
         method: "POST",
@@ -69,9 +70,9 @@ export default function StatusScreen() {
         setShowCreate(false);
         setNewStatusText("");
         setStatusType("text");
-        fetchStatuses();
+        void fetchStatuses();
       }
-    } catch (e) {
+    } catch {
       Toast.show({ type: "error", text1: "Failed to create status" });
     }
   };
@@ -84,7 +85,11 @@ export default function StatusScreen() {
     return (
       <TouchableOpacity
         style={styles.statusCard}
-        onPress={() => setViewingStatus(item)}
+        onPress={async () => {
+          await Haptics.selectionAsync();
+          setViewingStatus(item);
+        }}
+        activeOpacity={0.9}
       >
         <View style={styles.statusAvatarWrap}>
           <Avatar
@@ -269,11 +274,17 @@ const styles = StyleSheet.create({
   statusCard: {
     flex: 1,
     backgroundColor: Colors.bgPanel,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 12,
     margin: 4,
     alignItems: "center",
     maxWidth: "48%",
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.16,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
   },
   statusAvatarWrap: { position: "relative", marginBottom: 8 },
   myStatusBadge: {

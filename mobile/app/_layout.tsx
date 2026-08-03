@@ -22,7 +22,7 @@ function RootNavigator() {
     } else if (hydrated && isAuthenticated) {
       router.replace("/(tabs)");
     }
-  }, [hydrated, isAuthenticated]);
+  }, [hydrated, isAuthenticated, router]);
 
   if (!hydrated) {
     return (

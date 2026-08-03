@@ -4,6 +4,7 @@ import { StyleSheet, View, Text, Pressable } from "react-native";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 
 import { Colors } from "@/constants/theme";
 
@@ -45,7 +46,7 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
             const iconName = isFocused ? tab.icon : tab.iconOutline;
             const iconColor = isFocused ? Colors.text : Colors.textSecondary;
 
-            const onPress = () => {
+            const onPress = async () => {
               const event = navigation.emit({
                 type: "tabPress",
                 target: route.key,
@@ -53,6 +54,7 @@ function CustomTabBar({ state, descriptors, navigation }: CustomTabBarProps) {
               });
 
               if (!isFocused && !event.defaultPrevented) {
+                await Haptics.selectionAsync();
                 navigation.navigate(route.name);
               }
             };
@@ -112,12 +114,12 @@ export default function TabsLayout() {
 const styles = StyleSheet.create({
   fabContainer: {
     position: "absolute",
-    left: 16,
-    right: 16,
+    left: 12,
+    right: 12,
     shadowColor: Colors.fabShadow,
     shadowOpacity: 0.35,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 6 },
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
     elevation: 12,
   },
   tabBarBlur: {
@@ -130,9 +132,9 @@ const styles = StyleSheet.create({
   tabBarInner: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-around",
+    justifyContent: "space-between",
     paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingHorizontal: 6,
   },
   tabItem: {
     alignItems: "center",
@@ -140,17 +142,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 18,
-    minWidth: 54,
+    minWidth: 58,
+    minHeight: 48,
   },
   tabItemFocused: {
     backgroundColor: Colors.tabBarSelected,
   },
   tabItemPressed: {
-    opacity: 0.7,
+    opacity: 0.72,
   },
   tabLabel: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "700",
     marginTop: 3,
+    letterSpacing: 0.2,
   },
 });

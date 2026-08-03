@@ -1,1 +1,88 @@
-{"expo":{"name":"WaveChat","slug":"wavychat","version":"1.0.0","orientation":"portrait","icon":"./assets/images/icon.png","scheme":"wavychat","userInterfaceStyle":"dark","newArchEnabled":true,"ios":{"supportsTablet":true,"bundleIdentifier":"com.wavychat.app"},"android":{"package":"com.wavychat.app","adaptiveIcon":{"backgroundColor":"#0B141A","foregroundImage":"./assets/images/android-icon-foreground.png","backgroundImage":"./assets/images/android-icon-background.png","monochromeImage":"./assets/images/android-icon-monochrome.png"},"edgeToEdgeEnabled":true,"predictiveBackGestureEnabled":false},"web":{"output":"static","favicon":"./assets/images/favicon.png"},"extra":{"apiUrl":"https://wavy-10lu.onrender.com"},"plugins":["expo-router","expo-audio",["expo-image-picker",{"photosPermission":"Allow WaveChat to access your photos to send images and status updates.","cameraPermission":"Allow WaveChat to use your camera to take photos and videos."}],["expo-splash-screen",{"image":"./assets/images/splash-icon.png","imageWidth":200,"resizeMode":"contain","backgroundColor":"#000000","dark":{"backgroundColor":"#000000"}}]],"experiments":{"typedRoutes":true,"reactCompiler":true}}}
+{
+  "expo": {
+    "name": "Wavy",
+    "slug": "wavy",
+    "version": "1.0.0",
+    "orientation": "portrait",
+
+    "icon": "./assets/images/icon.png",
+
+    "scheme": "wavy",
+
+    "userInterfaceStyle": "dark",
+
+    "newArchEnabled": true,
+
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jatinmalik.wavy"
+    },
+
+    "android": {
+      "package": "com.jatinmalik.wavy",
+      "versionCode": 1,
+
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/android-icon-foreground.png",
+        "backgroundImage": "./assets/images/android-icon-background.png",
+        "monochromeImage": "./assets/images/android-icon-monochrome.png",
+        "backgroundColor": "#0B141A"
+      },
+
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+
+      "permissions": [
+        "android.permission.RECORD_AUDIO",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
+    },
+
+    "web": {
+      "output": "static",
+      "favicon": "./assets/images/favicon.png"
+    },
+
+    "plugins": [
+      "expo-router",
+      "expo-audio",
+
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Wavy to access your photos to send images and status updates.",
+          "cameraPermission": "Allow Wavy to use your camera to take photos and videos."
+        }
+      ],
+
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#0B141A",
+
+          "dark": {
+            "backgroundColor": "#0B141A"
+          }
+        }
+      ]
+    ],
+
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    },
+
+    "extra": {
+      "apiUrl": "https://wavy-10lu.onrender.com",
+
+      "router": {},
+
+      "eas": {
+        "projectId": "f603f378-344a-4e7a-ab57-6b3094a6203d"
+      }
+    }
+  }
+}

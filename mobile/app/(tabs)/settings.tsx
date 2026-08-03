@@ -7,13 +7,13 @@ import {
   StyleSheet,
   Modal,
   TextInput,
-  Image,
   Alert,
   Platform,
 } from "react-native";
 import { useDispatch, useSelector } from "react-redux";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import Toast from "react-native-toast-message";
 import * as FileSystem from "expo-file-system";
@@ -35,6 +35,7 @@ export default function SettingsScreen() {
   const [backupFileName, setBackupFileName] = useState("");
 
   const handleSaveProfile = async () => {
+    await Haptics.selectionAsync();
     try {
       const res = await fetch(`${API_URL}/api/user/profile`, {
         method: "PUT",
@@ -45,7 +46,7 @@ export default function SettingsScreen() {
         Toast.show({ type: "success", text1: "Profile updated" });
         setShowProfile(false);
       }
-    } catch (e) {
+    } catch {
       Toast.show({ type: "error", text1: "Failed to update" });
     }
   };
@@ -61,7 +62,7 @@ export default function SettingsScreen() {
         { headers: { Authorization: `Bearer ${token}` }, idempotent: true }
       );
       Toast.show({ type: "success", text1: "Data exported" });
-    } catch (e) {
+    } catch {
       Toast.show({ type: "error", text1: "Export failed" });
     }
   };
@@ -78,7 +79,7 @@ export default function SettingsScreen() {
         setBackupFileName(data.fileName);
         Toast.show({ type: "success", text1: "Backup created" });
       }
-    } catch (e) {
+    } catch {
       Toast.show({ type: "error", text1: "Backup failed" });
     }
   };
@@ -94,12 +95,13 @@ export default function SettingsScreen() {
         { headers: { Authorization: `Bearer ${token}` }, idempotent: true }
       );
       Toast.show({ type: "success", text1: "Backup downloaded" });
-    } catch (e) {
+    } catch {
       Toast.show({ type: "error", text1: "Download failed" });
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await Haptics.selectionAsync();
     Alert.alert("Log out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -122,7 +124,11 @@ export default function SettingsScreen() {
 
       <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
         {/* Profile Section */}
-        <TouchableOpacity style={styles.profileCard} onPress={() => setShowProfile(true)}>
+        <TouchableOpacity
+          style={styles.profileCard}
+          onPress={() => setShowProfile(true)}
+          activeOpacity={0.9}
+        >
           <Avatar
             name={user?.displayName || user?.username || "U"}
             photo={user?.profilePhoto}
@@ -220,10 +226,11 @@ export default function SettingsScreen() {
 
 function SettingRow({ icon, label }: { icon: string; label: string }) {
   return (
-    <View style={styles.settingRow}>
+    <TouchableOpacity activeOpacity={0.8} style={styles.settingRow}>
       <MaterialCommunityIcons name={icon as any} size={22} color={Colors.text} />
       <Text style={styles.settingLabel}>{label}</Text>
-    </View>
+      <MaterialCommunityIcons name="chevron-right" size={20} color={Colors.textSecondary} style={styles.settingChevron} />
+    </TouchableOpacity>
   );
 }
 
@@ -240,18 +247,26 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     backgroundColor: Colors.bgPanel,
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 16,
     marginBottom: 24,
+    borderWidth: 1,
+    borderColor: Colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
   },
   profileInfo: { flex: 1, marginLeft: 14 },
   profileName: { fontSize: 18, fontWeight: "700", color: Colors.text },
   profileBio: { fontSize: 14, color: Colors.textSecondary, marginTop: 2 },
   section: {
     backgroundColor: Colors.bgPanel,
-    borderRadius: 16,
+    borderRadius: 18,
     marginBottom: 24,
     overflow: "hidden",
+    borderWidth: 1,
+    borderColor: Colors.border,
   },
   sectionTitle: {
     fontSize: 14,
@@ -270,7 +285,8 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
   },
-  settingLabel: { fontSize: 15, color: Colors.text, marginLeft: 14 },
+  settingLabel: { fontSize: 15, color: Colors.text, marginLeft: 14, flex: 1 },
+  settingChevron: { marginLeft: "auto" },
   dataRow: {
     flexDirection: "row",
     alignItems: "center",

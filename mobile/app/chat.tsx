@@ -18,22 +18,23 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useSelector } from "react-redux";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { SafeAreaView } from "react-native-safe-area-context";
+import * as Haptics from "expo-haptics";
+import * as Clipboard from "expo-clipboard";
 import Toast from "react-native-toast-message";
 
 import { RootState } from "@/redux/store";
 import { API_URL } from "@/utils/api";
 import { getSocket } from "@/utils/socket";
-import { lastMessagePreview, formatDuration } from "@/utils/helpers";
+import { lastMessagePreview } from "@/utils/helpers";
 import Avatar from "@/components/Avatar";
 import { Colors } from "@/constants/theme";
 
 export default function ChatScreen() {
-  const { chatId, name, isGroup, photo, newChat } = useLocalSearchParams<{
+  const { chatId, name, isGroup, photo } = useLocalSearchParams<{
     chatId?: string;
     name?: string;
     isGroup?: string;
     photo?: string;
-    newChat?: string;
   }>();
   const { token, user } = useSelector((state: RootState) => state.auth);
   const [messages, setMessages] = useState<any[]>([]);
@@ -43,20 +44,13 @@ export default function ChatScreen() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [chatSearch, setChatSearch] = useState("");
   const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [contactInfo, setContactInfo] = useState(false);
   const [contextMenu, setContextMenu] = useState<any>(null);
   const [selectedMessages, setSelectedMessages] = useState<string[]>([]);
   const [selectMode, setSelectMode] = useState(false);
-  const [blockedUsers, setBlockedUsers] = useState<any[]>([]);
-  const [savedContacts, setSavedContacts] = useState<any[]>([]);
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const [activeChat, setActiveChat] = useState<any>(null);
 
   const flatListRef = useRef<FlatList>(null);
   const typingRef = useRef<any>(null);
-  const recordingRef = useRef<any>(null);
 
   const fetchMessages = useCallback(
     async (offset = 0) => {
@@ -82,35 +76,17 @@ export default function ChatScreen() {
     [chatId, token]
   );
 
-  const fetchBlocked = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/users/blocked`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok && res.headers.get("content-type")?.includes("application/json")) {
-        setBlockedUsers(await res.json());
-      }
-    } catch (e) {}
-  };
-
-  const fetchContacts = async () => {
-    if (!token) return;
-    try {
-      const res = await fetch(`${API_URL}/api/user/contacts`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        setSavedContacts(await res.json());
-      }
-    } catch (e) {}
-  };
+  useEffect(() => {
+    void fetchMessages();
+  }, [fetchMessages]);
 
   useEffect(() => {
-    fetchMessages();
-    fetchBlocked();
-    fetchContacts();
-  }, [fetchMessages]);
+    if (messages.length > 0) {
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      });
+    }
+  }, [messages.length]);
 
   // Socket events
   useEffect(() => {
@@ -175,7 +151,8 @@ export default function ChatScreen() {
     };
   }, [token, chatId, user?.id]);
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
+    await Haptics.selectionAsync();
     const content = newMessage.trim();
     if (!content || !chatId || !token) return;
     const socket = getSocket(token);
@@ -253,7 +230,12 @@ export default function ChatScreen() {
     Toast.show({ type: "success", text1: "Messages deleted" });
   };
 
-  const isBlocked = activeChat && !activeChat?.isGroup && activeChat?.otherUser && blockedUsers.some((u) => u.id === activeChat.otherUser.id);
+  const handleCopyMessage = async (content: string) => {
+    if (!content) return;
+    await Clipboard.setStringAsync(content);
+    Toast.show({ type: "success", text1: "Copied" });
+    setContextMenu(null);
+  };
 
   const renderMessage = ({ item: msg }: { item: any }) => {
     const isMe = msg.senderId === user?.id;
@@ -303,7 +285,7 @@ export default function ChatScreen() {
             </Text>
           ) : (
             <>
-              {!isMe && activeChat?.isGroup && (
+              {!isMe && isGroup === "1" && (
                 <Text style={styles.msgSender}>{msg.sender?.name || msg.senderName || "User"}</Text>
               )}
               {repliedMsg && (
@@ -385,7 +367,7 @@ export default function ChatScreen() {
         <TouchableOpacity onPress={() => router.back()} style={{ padding: 4, marginRight: 8 }}>
           <MaterialCommunityIcons name="arrow-left" size={24} color={Colors.text} />
         </TouchableOpacity>
-        <TouchableOpacity style={{ flex: 1, flexDirection: "row", alignItems: "center" }} onPress={() => setContactInfo(true)}>
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center" }}>
           <Avatar name={name || "Chat"} photo={photo} size={40} />
           <View style={{ marginLeft: 10 }}>
             <Text style={styles.headerName}>{name || "Chat"}</Text>
@@ -395,12 +377,24 @@ export default function ChatScreen() {
               <Text style={styles.headerStatus}>{isGroup === "1" ? "Group" : "Online"}</Text>
             )}
           </View>
-        </TouchableOpacity>
+        </View>
         <View style={{ flexDirection: "row", gap: 4 }}>
-          <TouchableOpacity onPress={() => setIsSearchOpen(!isSearchOpen)} style={{ padding: 8 }}>
+          <TouchableOpacity
+            onPress={async () => {
+              await Haptics.selectionAsync();
+              setIsSearchOpen(!isSearchOpen);
+            }}
+            style={{ padding: 8 }}
+          >
             <MaterialCommunityIcons name="magnify" size={22} color={Colors.textSecondary} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSelectMode(!selectMode)} style={{ padding: 8 }}>
+          <TouchableOpacity
+            onPress={async () => {
+              await Haptics.selectionAsync();
+              setSelectMode(!selectMode);
+            }}
+            style={{ padding: 8 }}
+          >
             <MaterialCommunityIcons name="check-circle-outline" size={22} color={Colors.textSecondary} />
           </TouchableOpacity>
         </View>
@@ -490,11 +484,23 @@ export default function ChatScreen() {
 
         {/* Input bar */}
         <View style={styles.inputBar}>
-          <TouchableOpacity onPress={() => Alert.alert("Info", "Attachments coming soon")} style={{ padding: 8 }}>
+          <TouchableOpacity
+            onPress={async () => {
+              await Haptics.selectionAsync();
+              Toast.show({ type: "info", text1: "Attachment picker coming soon" });
+            }}
+            style={{ padding: 8 }}
+          >
             <MaterialCommunityIcons name="plus" size={24} color={Colors.textSecondary} />
           </TouchableOpacity>
           {newMessage.trim() ? (
-            <TouchableOpacity onPress={() => Alert.alert("Info", "Emoji picker coming soon")} style={{ padding: 8 }}>
+            <TouchableOpacity
+              onPress={async () => {
+                await Haptics.selectionAsync();
+                Alert.alert("Info", "Emoji picker coming soon");
+              }}
+              style={{ padding: 8 }}
+            >
               <MaterialCommunityIcons name="emoticon-outline" size={24} color={Colors.textSecondary} />
             </TouchableOpacity>
           ) : null}
@@ -514,7 +520,8 @@ export default function ChatScreen() {
             </TouchableOpacity>
           ) : (
             <TouchableOpacity
-              onPress={() => {
+              onPress={async () => {
+                await Haptics.selectionAsync();
                 Alert.alert("Recording", "Voice recording coming soon");
               }}
               style={styles.sendBtn}
@@ -549,13 +556,7 @@ export default function ChatScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.contextItem}
-              onPress={() => {
-                if (contextMenu?.content) {
-                  // Clipboard not available in all environments, just show toast
-                  Toast.show({ type: "success", text1: "Copied" });
-                }
-                setContextMenu(null);
-              }}
+              onPress={() => handleCopyMessage(contextMenu?.content)}
             >
               <MaterialCommunityIcons name="content-copy" size={20} color={Colors.text} />
               <Text style={styles.contextItemText}>Copy</Text>
@@ -601,6 +602,10 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Colors.border,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
   },
   headerName: { fontSize: 17, fontWeight: "700", color: Colors.text },
   headerStatus: { fontSize: 12, color: Colors.textSecondary, marginTop: 1 },
@@ -629,12 +634,12 @@ const styles = StyleSheet.create({
   msgBubble: {
     paddingHorizontal: 12,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 18,
     minWidth: 80,
     shadowColor: "#000",
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
-    elevation: 1,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 2,
   },
   msgSender: { fontSize: 12, fontWeight: "700", color: Colors.primary, marginBottom: 2 },
   msgText: { fontSize: 15, color: Colors.text, lineHeight: 20 },
@@ -698,10 +703,10 @@ const styles = StyleSheet.create({
   replyBarText: { fontSize: 13, color: Colors.textSecondary, marginTop: 2 },
   inputBar: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-end",
     backgroundColor: Colors.bgPanel,
     paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Colors.border,
   },
@@ -710,7 +715,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.bgInput,
     borderRadius: 20,
     paddingHorizontal: 14,
-    maxHeight: 100,
+    maxHeight: 120,
+    marginHorizontal: 4,
   },
   input: {
     color: Colors.text,
@@ -719,13 +725,17 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   sendBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     backgroundColor: Colors.primary,
     alignItems: "center",
     justifyContent: "center",
-    marginLeft: 8,
+    marginLeft: 6,
+    shadowColor: Colors.primary,
+    shadowOpacity: 0.35,
+    shadowRadius: 9,
+    shadowOffset: { width: 0, height: 4 },
   },
   contextOverlay: {
     flex: 1,
@@ -742,6 +752,109 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 15,
     elevation: 10,
+  },
+  contactSheet: {
+    width: "92%",
+    backgroundColor: Colors.bgPanel,
+    borderRadius: 24,
+    padding: 18,
+    shadowColor: "#000",
+    shadowOpacity: 0.35,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  contactSheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  contactSheetName: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  contactSheetSub: {
+    fontSize: 13,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  contactStatsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 16,
+  },
+  contactStatCard: {
+    flex: 1,
+    backgroundColor: Colors.bgInput,
+    borderRadius: 14,
+    paddingVertical: 12,
+    alignItems: "center",
+  },
+  contactStatValue: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  contactStatLabel: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 4,
+  },
+  contactSheetActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  contactAction: {
+    flex: 1,
+    alignItems: "center",
+    paddingVertical: 12,
+    borderRadius: 14,
+    backgroundColor: Colors.bgInput,
+  },
+  contactActionText: {
+    marginTop: 6,
+    fontSize: 12,
+    color: Colors.text,
+    fontWeight: "600",
+  },
+  attachSheet: {
+    width: "92%",
+    backgroundColor: Colors.bgPanel,
+    borderRadius: 24,
+    padding: 18,
+  },
+  attachHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  attachTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Colors.text,
+  },
+  attachGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  attachTile: {
+    width: "47%",
+    backgroundColor: Colors.bgInput,
+    borderRadius: 16,
+    padding: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 90,
+  },
+  attachTileText: {
+    marginTop: 8,
+    color: Colors.text,
+    fontSize: 13,
+    fontWeight: "600",
   },
   reactionRow: {
     flexDirection: "row",
